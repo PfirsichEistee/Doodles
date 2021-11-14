@@ -23,6 +23,18 @@ typedef struct _DoodlesGuiController		DoodlesGuiController;
 typedef struct _DoodlesGuiControllerClass	DoodlesGuiControllerClass;
 
 
+// Enums
+enum tool {
+	TOOL_NONE = 0,
+	TOOL_PEN,
+	TOOL_HIGHLIGHTER,
+	TOOL_ERASER,
+	TOOL_TEXT,
+	TOOL_GRAPH,
+	TOOL_SELECTION
+};
+
+
 // Prototypes
 GType doodles_gui_controller_get_type();
 DoodlesGuiController* doodles_gui_controller_new();
@@ -30,6 +42,7 @@ GtkWidget* doodles_gui_controller_get_widget(DoodlesGuiController* self);
 void doodles_gui_controller_destroy(DoodlesGuiController* self); // TODO delete later
 void doodles_gui_controller_get_color(	DoodlesGuiController*	self,
 										GdkRGBA*				color);
+gint doodles_gui_controller_get_tool(DoodlesGuiController* self);
 gdouble doodles_gui_controller_get_size(DoodlesGuiController* self);
 
 

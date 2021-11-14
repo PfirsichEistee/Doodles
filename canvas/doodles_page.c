@@ -153,28 +153,19 @@ dispose(GObject* object)
 
 
 // Events
+
+
+/////////////////
+// TOOL EVENTS //
+/////////////////
+
+
+
 static gboolean
-on_legacy_event(	GtkEventControllerLegacy*	event_controller,
-					GdkEvent*					event,
-					gpointer					user_data)
+pen_event(	DoodlesPage*	self,
+			GdkEvent*		event,
+			gdouble crs_x, gdouble crs_y)
 {
-	DoodlesPage* self = DOODLES_PAGE(user_data);
-	
-	
-	gdouble evt_x, evt_y;
-	gdouble crs_x, crs_y;
-	gdk_event_get_position(event, &evt_x, &evt_y);
-	
-	GtkWidget* root = GTK_WIDGET(gtk_widget_get_root(GTK_WIDGET(self->layer_work)));
-	
-	gtk_widget_translate_coordinates(	root,
-										GTK_WIDGET(self->layer_work),
-										evt_x, evt_y,
-										&crs_x, &crs_y);
-	
-	pos_to_cm(&crs_x, &crs_y);
-	
-	
 	switch (gdk_event_get_event_type(event))
 	{
 		case (GDK_ENTER_NOTIFY):
@@ -293,6 +284,93 @@ on_legacy_event(	GtkEventControllerLegacy*	event_controller,
 	
 	return FALSE;
 }
+
+
+static gboolean
+eraser_event(	DoodlesPage*	self,
+				GdkEvent*		event,
+				gdouble crs_x, gdouble crs_y)
+{
+	switch (gdk_event_get_event_type(event))
+	{
+		case (GDK_ENTER_NOTIFY):
+			break;
+		case (GDK_LEAVE_NOTIFY):
+			break;
+		case (GDK_MOTION_NOTIFY):
+			if (!self->mouse_pressed[0] && (crs_x >= doodles_canvas_get_width(self->layer_work) || crs_y >= doodles_canvas_get_height(self->layer_work)))
+				return FALSE;
+			
+			self->cursor_x = crs_x;
+			self->cursor_y = crs_y;
+			
+			
+			gtk_widget_queue_draw(GTK_WIDGET(self->layer_work));
+			break;
+		case (GDK_BUTTON_PRESS):
+			
+			gtk_widget_queue_draw(GTK_WIDGET(self->layer_work));
+			break;
+		case (GDK_BUTTON_RELEASE):
+			
+			gtk_widget_queue_draw(GTK_WIDGET(self->layer_work));
+			break;
+	}
+	
+	return FALSE;
+}
+
+
+static gboolean
+on_legacy_event(	GtkEventControllerLegacy*	event_controller,
+					GdkEvent*					event,
+					gpointer					user_data)
+{
+	DoodlesPage* self = DOODLES_PAGE(user_data);
+	
+	if (doodles_gui_controller_get_tool(self->gui_controller) == 0)
+		return FALSE;
+	
+	
+	gdouble evt_x, evt_y;
+	gdouble crs_x, crs_y;
+	gdk_event_get_position(event, &evt_x, &evt_y);
+	
+	GtkWidget* root = GTK_WIDGET(gtk_widget_get_root(GTK_WIDGET(self->layer_work)));
+	
+	gtk_widget_translate_coordinates(	root,
+										GTK_WIDGET(self->layer_work),
+										evt_x, evt_y,
+										&crs_x, &crs_y);
+	
+	pos_to_cm(&crs_x, &crs_y);
+	
+	
+	switch (doodles_gui_controller_get_tool(self->gui_controller))
+	{
+		case (1): // TOOL_PEN
+			return pen_event(	self,
+								event,
+								crs_x, crs_y);
+		case (3): // TOOL_ERASER
+			return eraser_event(	self,
+									event,
+									crs_x, crs_y);
+	}
+	
+	
+	return FALSE;
+}
+
+
+
+
+
+
+
+
+
+
 
 static gboolean
 on_draw(	GtkWidget*		widget,
