@@ -6,7 +6,7 @@
 #include<adwaita.h>
 #include "canvas/doodles_page.h"
 #include "canvas/doodles_canvas.h"
-#include "canvas/doodles_color_button.h"
+#include "widgets/doodles_popup_button.h"
 
 
 // Macros

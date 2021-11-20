@@ -51,11 +51,28 @@ static void make_tool_eraser_box(ToolContainer* container);
 
 static ToolContainer* make_tool_text();
 static ToolContainer* make_tool_selection();
-static void on_color_button_clicked(	DoodlesColorButton* self,
+static void on_color_button_clicked(	DoodlesPopupButton* self,
 										gpointer user_data);
 static void on_tool_button_clicked(	GtkButton*	button,
 									gpointer	user_data);
 static ToolContainer* doodles_gui_controller_get_tool_container(DoodlesGuiController* self);
+
+
+// Color button
+static GtkWidget*
+create_color_button(gdouble r, gdouble g, gdouble b);
+
+static void
+color_button_draw(	DoodlesPopupButton*	button,
+					GtkSnapshot*		snap,
+					gdouble				w,
+					gdouble				h);
+
+static void
+color_button_on_color_activated(	GtkColorChooser*	color_chooser,
+									GdkRGBA*			color,
+									gpointer			user_data);
+
 
 
 
@@ -258,10 +275,10 @@ make_tool_pen_box(ToolContainer* container)
 	container->box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 	
 	// Child list
-	GtkWidget* clr1 = doodles_color_button_new(0.0, 0.0, 0.0);
-	GtkWidget* clr2 = doodles_color_button_new(1.0, 0.0, 0.0);
-	GtkWidget* clr3 = doodles_color_button_new(0.2, 0.2, 1.0);
-	doodles_color_button_set_state(DOODLES_COLOR_BUTTON(clr1), TRUE);
+	GtkWidget* clr1 = create_color_button(0.0, 0.0, 0.0);
+	GtkWidget* clr2 = create_color_button(1.0, 0.0, 0.0);
+	GtkWidget* clr3 = create_color_button(0.2, 0.2, 1.0);
+	doodles_popup_button_set_state(DOODLES_POPUP_BUTTON(clr1), TRUE);
 	
 	
 	const char* icons[2];
@@ -309,10 +326,10 @@ make_tool_highlighter_box(ToolContainer* container)
 	container->box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 	
 	// Child list
-	GtkWidget* clr1 = doodles_color_button_new(1.0, 1.0, 0.4);
-	GtkWidget* clr2 = doodles_color_button_new(0.4, 1.0, 0.4);
-	GtkWidget* clr3 = doodles_color_button_new(0.4, 0.4, 1.0);
-	doodles_color_button_set_state(DOODLES_COLOR_BUTTON(clr1), TRUE);
+	GtkWidget* clr1 = create_color_button(1.0, 1.0, 0.4);
+	GtkWidget* clr2 = create_color_button(0.4, 1.0, 0.4);
+	GtkWidget* clr3 = create_color_button(0.4, 0.4, 1.0);
+	doodles_popup_button_set_state(DOODLES_POPUP_BUTTON(clr1), TRUE);
 	
 	
 	const char* icons[2];
@@ -389,7 +406,7 @@ make_tool_selection()
 
 
 static void
-on_color_button_clicked(	DoodlesColorButton* self,
+on_color_button_clicked(	DoodlesPopupButton* self,
 							gpointer user_data)
 {
 	ToolContainer* container = user_data;
@@ -399,7 +416,7 @@ on_color_button_clicked(	DoodlesColorButton* self,
 	
 	for (guint i = 0; i < 3; i++)
 	{
-		doodles_color_button_set_state(	DOODLES_COLOR_BUTTON(list->data),
+		doodles_popup_button_set_state(	DOODLES_POPUP_BUTTON(list->data),
 										FALSE);
 		
 		list = list->next;
@@ -475,9 +492,10 @@ doodles_gui_controller_get_color(	DoodlesGuiController*	self,
 			GList* list = g_list_first(self->tool_pen->box_children);
 			for (guint i = 0; i < 3; i++)
 			{
-				if (doodles_color_button_get_state(DOODLES_COLOR_BUTTON(list->data)))
+				if (doodles_popup_button_get_state(DOODLES_POPUP_BUTTON(list->data)))
 				{
-					doodles_color_button_get_color(DOODLES_COLOR_BUTTON(list->data), color);
+					GtkWidget* color_chooser = doodles_popup_button_get_popover_child(DOODLES_POPUP_BUTTON(list->data));
+					gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(color_chooser), color);
 					
 					return;
 				}
@@ -538,3 +556,77 @@ doodles_gui_controller_get_size(DoodlesGuiController* self)
 			return 0.1;
 	}
 }
+
+
+
+// Color popup button
+static GtkWidget*
+create_color_button(gdouble r, gdouble g, gdouble b)
+{
+	// Create color chooser
+	GtkWidget* color_chooser = gtk_color_chooser_widget_new();
+	gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(color_chooser), FALSE);
+	
+	GdkRGBA* color = malloc(sizeof(GdkRGBA));
+	color->red = r;
+	color->green = g;
+	color->blue = b;
+	color->alpha = 1.0;
+	gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_chooser), color);
+	
+	// Create button
+	DoodlesPopupButton* btn = DOODLES_POPUP_BUTTON(doodles_popup_button_new(color_chooser));
+	doodles_popup_button_set_draw_func(btn, color_button_draw);
+	
+	// Connect signals
+	g_signal_connect(	color_chooser,
+						"color-activated",
+						G_CALLBACK(color_button_on_color_activated),
+						btn);
+	
+	// Done
+	return GTK_WIDGET(btn);
+}
+static void
+color_button_draw(	DoodlesPopupButton*	button,
+					GtkSnapshot*		snap,
+					gdouble				w,
+					gdouble				h)
+{
+	GtkWidget* color_chooser = doodles_popup_button_get_popover_child(button);
+	
+	GdkRGBA color;
+	gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(color_chooser), &color);
+	
+	gtk_snapshot_append_color(	snap,
+								&color,
+								&GRAPHENE_RECT_INIT(0, 0, w, h));
+}
+static void
+color_button_on_color_activated(	GtkColorChooser*	color_chooser,
+									GdkRGBA*			color,
+									gpointer			user_data)
+{
+	DoodlesPopupButton* btn = (DoodlesPopupButton*)user_data;
+	
+	// Close popup on selection
+	doodles_popup_button_set_open(btn, FALSE);
+	
+	// Redraw newly chosen color
+	gtk_widget_queue_draw(GTK_WIDGET(btn));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

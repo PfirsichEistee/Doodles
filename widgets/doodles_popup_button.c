@@ -1,15 +1,15 @@
-#include "doodles_color_button.h"
+#include "doodles_popup_button.h"
 
 
 // Structs
-struct _DoodlesColorButtonClass
+struct _DoodlesPopupButtonClass
 {
 	GtkWidgetClass parent;
 	
 	// ...
 };
 
-struct _DoodlesColorButton
+struct _DoodlesPopupButton
 {
 	GtkWidget	parent;
 	
@@ -17,6 +17,8 @@ struct _DoodlesColorButton
 	
 	gboolean	selected;
 	gboolean	hovering;
+	
+	void		(*draw_func)(DoodlesPopupButton*, GtkSnapshot*, gdouble, gdouble);
 };
 
 
@@ -43,9 +45,6 @@ static void on_motion_exit(	GtkEventControllerMotion*	controller,
 static gboolean on_legacy_event(	GtkEventControllerLegacy*	controller,
 									GdkEvent*					event,
 									gpointer					user_data);
-static void on_color_activated (	GtkColorChooser*	color_chooser,
-									GdkRGBA*			color,
-									gpointer			user_data);
 
 
 // Variables
@@ -56,14 +55,14 @@ static guint signal_id[1];
 static void
 dispose(GObject* object)
 {
-	DoodlesColorButton* self = DOODLES_COLOR_BUTTON(object);
+	DoodlesPopupButton* self = DOODLES_POPUP_BUTTON(object);
 	
 	g_clear_pointer(&self->popover, gtk_widget_unparent);
 }
 
 
 static void
-doodles_color_button_class_init(	gpointer	klass,
+doodles_popup_button_class_init(	gpointer	klass,
 									gpointer	klass_data)
 {
 	G_OBJECT_CLASS(klass)->dispose = dispose;
@@ -76,7 +75,7 @@ doodles_color_button_class_init(	gpointer	klass,
 	
 	// This signal will be emitted BEFORE setting "selected = true"
 	signal_id[0] = g_signal_new(	"toggle",
-									DOODLES_TYPE_COLOR_BUTTON,
+									DOODLES_TYPE_POPUP_BUTTON,
 									G_SIGNAL_RUN_FIRST,
 									0,
 									NULL, NULL, // Accumulator
@@ -87,13 +86,14 @@ doodles_color_button_class_init(	gpointer	klass,
 
 
 static void
-doodles_color_button_instance_init(	GTypeInstance*	instance,
+doodles_popup_button_instance_init(	GTypeInstance*	instance,
 									gpointer		klass)
 {
-	DoodlesColorButton* self = DOODLES_COLOR_BUTTON(instance);
+	DoodlesPopupButton* self = DOODLES_POPUP_BUTTON(instance);
 	
 	self->selected = FALSE;
 	self->hovering = FALSE;
+	self->draw_func = NULL;
 	
 	// Event controllers
 	GtkEventController* motion_controller = gtk_event_controller_motion_new();
@@ -120,21 +120,11 @@ doodles_color_button_instance_init(	GTypeInstance*	instance,
 	
 	self->popover = gtk_popover_new();
 	gtk_widget_set_parent(self->popover, GTK_WIDGET(self));
-	//gtk_popover_set_autohide(GTK_POPOVER(self->popover), FALSE);
-	
-	GtkWidget* color_chooser = gtk_color_chooser_widget_new();
-	gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(color_chooser), FALSE);
-	gtk_popover_set_child(GTK_POPOVER(self->popover), color_chooser);
-	
-	g_signal_connect(	color_chooser,
-						"color-activated",
-						G_CALLBACK(on_color_activated),
-						self);
 }
 
 
 GType
-doodles_color_button_get_type()
+doodles_popup_button_get_type()
 {
 	static GType type = 0;
 	
@@ -142,19 +132,19 @@ doodles_color_button_get_type()
 	{
 		const GTypeInfo info =
 		{
-			.class_size		= sizeof(DoodlesColorButtonClass),
+			.class_size		= sizeof(DoodlesPopupButtonClass),
 			.base_init		= NULL,
 			.base_finalize	= NULL,
-			.class_init		= doodles_color_button_class_init,
+			.class_init		= doodles_popup_button_class_init,
 			.class_finalize	= NULL,
 			.class_data		= NULL,
-			.instance_size	= sizeof(DoodlesColorButton),
-			.instance_init	= doodles_color_button_instance_init,
+			.instance_size	= sizeof(DoodlesPopupButton),
+			.instance_init	= doodles_popup_button_instance_init,
 			.n_preallocs	= 0
 		};
 		
 		type = g_type_register_static(	GTK_TYPE_WIDGET,
-										"DoodlesColorButton",
+										"DoodlesPopupButton",
 										&info,
 										0);
 	}
@@ -171,7 +161,7 @@ get_request_mode(GtkWidget* self)
 }
 
 static void
-measure (	GtkWidget*		self,
+measure(	GtkWidget*		self,
 			GtkOrientation	orientation,
 			gint			for_size,
 			gint*			minimum,
@@ -198,61 +188,52 @@ static void
 snapshot(	GtkWidget*		self_widget,
 			GtkSnapshot*	snap)
 {
-	DoodlesColorButton* self = DOODLES_COLOR_BUTTON(self_widget);
+	DoodlesPopupButton* self = DOODLES_POPUP_BUTTON(self_widget);
 	
 	gdouble w = gtk_widget_get_width(self_widget);
 	gdouble h = gtk_widget_get_height(self_widget);
 	
-	GtkWidget* color_chooser = gtk_popover_get_child(GTK_POPOVER(self->popover));
 	
-	
-	
-	
-	
-	GdkRGBA grey, black;
-	gdk_rgba_parse(&grey, "#BBBBBB44");
-	gdk_rgba_parse(&black, "#44444488");
+	// Draw
+	GdkRGBA color;
+	gdk_rgba_parse(&color, "#44444488");
 	
 	for (guint i = 1; i <= (self->hovering + self->selected); i++)
 	if (self->selected)
 		gtk_snapshot_append_color(	snap,
-									&black,
+									&color,
 									&GRAPHENE_RECT_INIT(0, 0, w, h));
 	
 	
-	GdkRGBA color;
-	gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(color_chooser), &color);
+	if (self->draw_func != NULL)
+	{
+		gtk_snapshot_save(snap);
+		
+		gtk_snapshot_translate(	snap,
+								&GRAPHENE_POINT_INIT(0.2 * w, 0.2 * h));
+		self->draw_func(self, snap, 0.6 * w, 0.6 * h);
+		
+		gtk_snapshot_restore(snap);
+	}
 	
-	gtk_snapshot_append_color(	snap,
-								&color,
-								&GRAPHENE_RECT_INIT(0.2 * w, 0.2 * h, 0.6 * w, 0.6 * h));
 	
+	gdk_rgba_parse(&color, "#BBBBBB44");
 	
 	if (self->hovering)
 		gtk_snapshot_append_color(	snap,
-									&grey,
+									&color,
 									&GRAPHENE_RECT_INIT(0, 0, w, h));
 }
 
 
 // Constructor
 GtkWidget*
-doodles_color_button_new(	gdouble		r,
-							gdouble		g,
-							gdouble		b)
+doodles_popup_button_new(GtkWidget* popover_child)
 {
-	GObject* new = g_object_new(DOODLES_TYPE_COLOR_BUTTON, NULL);
-	DoodlesColorButton* self = DOODLES_COLOR_BUTTON(new);
+	GObject* new = g_object_new(DOODLES_TYPE_POPUP_BUTTON, NULL);
+	DoodlesPopupButton* self = DOODLES_POPUP_BUTTON(new);
 	
-	GtkWidget* color_chooser = gtk_popover_get_child(GTK_POPOVER(self->popover));
-	
-	GdkRGBA* color = malloc(sizeof(GdkRGBA));
-	color->red = r;
-	color->green = g;
-	color->blue = b;
-	color->alpha = 1.0;
-	
-	gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_chooser), color);
+	gtk_popover_set_child(GTK_POPOVER(self->popover), popover_child);
 	
 	return GTK_WIDGET(new);
 }
@@ -265,7 +246,7 @@ on_motion_enter(	GtkEventControllerMotion*	controller,
 					gdouble						y,
 					gpointer					user_data)
 {
-	DoodlesColorButton* self = DOODLES_COLOR_BUTTON(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller)));
+	DoodlesPopupButton* self = DOODLES_POPUP_BUTTON(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller)));
 	
 	self->hovering = TRUE;
 	
@@ -278,7 +259,7 @@ on_motion_exit(	GtkEventControllerMotion*	controller,
 				gdouble						y,
 				gpointer					user_data)
 {
-	DoodlesColorButton* self = DOODLES_COLOR_BUTTON(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller)));
+	DoodlesPopupButton* self = DOODLES_POPUP_BUTTON(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller)));
 	
 	self->hovering = FALSE;
 	
@@ -292,19 +273,19 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 {
 	if (gdk_event_get_event_type(event) == GDK_BUTTON_PRESS && gdk_button_event_get_button(event) == 1)
 	{
-		DoodlesColorButton* self = DOODLES_COLOR_BUTTON(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller)));
+		DoodlesPopupButton* self = DOODLES_POPUP_BUTTON(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller)));
 		
 		if (self->selected)
 		{
 			// Already opened?
 			if (gtk_widget_get_visible(self->popover))
 			{
-				// Close color popup
+				// Close popup popup
 				gtk_popover_popdown(GTK_POPOVER(self->popover));
 				return FALSE;
 			}
 			
-			// Open color popup
+			// Open popup popup
 			gtk_popover_popup(GTK_POPOVER(self->popover));
 		}
 		
@@ -328,23 +309,11 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 	return FALSE;
 }
 
-static void
-on_color_activated (	GtkColorChooser*	color_chooser,
-						GdkRGBA*			color,
-						gpointer			user_data)
-{
-	DoodlesColorButton* self = (DoodlesColorButton*)user_data;
-	
-	gtk_popover_popdown(GTK_POPOVER(self->popover));
-	
-	gtk_widget_queue_draw(GTK_WIDGET(self));
-}
-
 
 // Else
 
 void
-doodles_color_button_set_state(	DoodlesColorButton*	self,
+doodles_popup_button_set_state(	DoodlesPopupButton*	self,
 								gboolean			state)
 {
 	self->selected = state;
@@ -352,16 +321,43 @@ doodles_color_button_set_state(	DoodlesColorButton*	self,
 }
 
 gboolean
-doodles_color_button_get_state(DoodlesColorButton* self)
+doodles_popup_button_get_state(DoodlesPopupButton* self)
 {
 	return self->selected;
 }
 
-void
-doodles_color_button_get_color(	DoodlesColorButton*	self,
-								GdkRGBA*			color)
+GtkWidget*
+doodles_popup_button_get_popover_child(DoodlesPopupButton* self)
 {
-	GtkWidget* color_chooser = gtk_popover_get_child(GTK_POPOVER(self->popover));
-	
-	gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(color_chooser), color);
+	return gtk_popover_get_child(GTK_POPOVER(self->popover));
 }
+
+void
+doodles_popup_button_set_draw_func(	DoodlesPopupButton*	self,
+									void				(*draw_func)(DoodlesPopupButton*, GtkSnapshot*, gdouble, gdouble))
+{
+	self->draw_func = draw_func;
+}
+
+void
+doodles_popup_button_set_open(	DoodlesPopupButton*	self,
+								gboolean			state)
+{
+	if (state)
+		gtk_popover_popup(GTK_POPOVER(self->popover));
+	else
+		gtk_popover_popdown(GTK_POPOVER(self->popover));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
