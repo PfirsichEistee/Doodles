@@ -52,6 +52,12 @@ void
 doodles_popup_button_set_open(	DoodlesPopupButton*	self,
 								gboolean			state);
 
+// Is it a toggle-button?
+void
+doodles_popup_button_set_toggle(	DoodlesPopupButton*	self,
+									gboolean			state);
+
+
 
 /* SIGNALS:
 "toggled": void toggled(DoodlesPopupButton* self);

@@ -17,6 +17,7 @@ struct _DoodlesPopupButton
 	
 	gboolean	selected;
 	gboolean	hovering;
+	gboolean	toggleable;
 	
 	void		(*draw_func)(DoodlesPopupButton*, GtkSnapshot*, gdouble, gdouble);
 };
@@ -93,6 +94,7 @@ doodles_popup_button_instance_init(	GTypeInstance*	instance,
 	
 	self->selected = FALSE;
 	self->hovering = FALSE;
+	self->toggleable = TRUE;
 	self->draw_func = NULL;
 	
 	// Event controllers
@@ -275,7 +277,7 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 	{
 		DoodlesPopupButton* self = DOODLES_POPUP_BUTTON(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller)));
 		
-		if (self->selected)
+		if (self->selected || !self->toggleable)
 		{
 			// Already opened?
 			if (gtk_widget_get_visible(self->popover))
@@ -300,7 +302,8 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 		
 		
 		// Set selected
-		self->selected = TRUE;
+		if (self->toggleable)
+			self->selected = TRUE;
 		gtk_widget_queue_draw(GTK_WIDGET(self));
 		
 		return TRUE;
@@ -347,6 +350,13 @@ doodles_popup_button_set_open(	DoodlesPopupButton*	self,
 		gtk_popover_popup(GTK_POPOVER(self->popover));
 	else
 		gtk_popover_popdown(GTK_POPOVER(self->popover));
+}
+
+void
+doodles_popup_button_set_toggle(	DoodlesPopupButton*	self,
+									gboolean			state)
+{
+	self->toggleable = state;
 }
 
 

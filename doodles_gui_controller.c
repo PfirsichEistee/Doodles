@@ -73,6 +73,20 @@ color_button_on_color_activated(	GtkColorChooser*	color_chooser,
 									GdkRGBA*			color,
 									gpointer			user_data);
 
+// Scale button
+static GtkWidget*
+create_scale_button(gdouble value, gdouble min, gdouble max, gdouble step);
+
+static void
+scale_button_draw(	DoodlesPopupButton*	button,
+					GtkSnapshot*		snap,
+					gdouble				w,
+					gdouble				h);
+
+static void
+scale_button_on_value_changed(	GtkRange*	range,
+								gpointer	user_data);
+
 
 
 
@@ -280,11 +294,8 @@ make_tool_pen_box(ToolContainer* container)
 	GtkWidget* clr3 = create_color_button(0.2, 0.2, 1.0);
 	doodles_popup_button_set_state(DOODLES_POPUP_BUTTON(clr1), TRUE);
 	
+	GtkWidget* scale = create_scale_button(0.05, 0.01, 0.1, 0.01);
 	
-	const char* icons[2];
-	icons[0] = "media-record-symbolic";
-	icons[1] = NULL;
-	GtkWidget* scale = gtk_scale_button_new(0.1, 0.8, 0.1, icons);
 	
 	container->box_children = g_list_append(NULL, clr1);
 	container->box_children = g_list_append(container->box_children, clr2);
@@ -331,11 +342,8 @@ make_tool_highlighter_box(ToolContainer* container)
 	GtkWidget* clr3 = create_color_button(0.4, 0.4, 1.0);
 	doodles_popup_button_set_state(DOODLES_POPUP_BUTTON(clr1), TRUE);
 	
+	GtkWidget* scale = create_scale_button(0.1, 0.05, 0.2, 0.01);
 	
-	const char* icons[2];
-	icons[0] = "media-record-symbolic";
-	icons[1] = NULL;
-	GtkWidget* scale = gtk_scale_button_new(0.4, 1.0, 0.1, icons);
 	
 	container->box_children = g_list_append(NULL, clr1);
 	container->box_children = g_list_append(container->box_children, clr2);
@@ -376,10 +384,7 @@ make_tool_eraser_box(ToolContainer* container)
 	container->box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 	
 	// Child list
-	const char* icons[2];
-	icons[0] = "media-record-symbolic";
-	icons[1] = NULL;
-	GtkWidget* scale = gtk_scale_button_new(0.4, 1.0, 0.1, icons);
+	GtkWidget* scale = create_scale_button(0.1, 0.05, 0.2, 0.01);
 	
 	container->box_children = g_list_append(NULL, scale);
 	
@@ -549,9 +554,10 @@ doodles_gui_controller_get_size(DoodlesGuiController* self)
 		case (TOOL_ERASER):
 			// Index 3 (last) is GtkScaleButton
 			GList* list = g_list_last(container->box_children);
-			GtkWidget* scale_button = GTK_WIDGET(list->data);
+			GtkWidget* button = GTK_WIDGET(list->data);
+			GtkWidget* scale = doodles_popup_button_get_popover_child(DOODLES_POPUP_BUTTON(button));
 			
-			return gtk_scale_button_get_value(GTK_SCALE_BUTTON(scale_button));
+			return gtk_range_get_value(GTK_RANGE(scale));
 		default:
 			return 0.1;
 	}
@@ -613,6 +619,89 @@ color_button_on_color_activated(	GtkColorChooser*	color_chooser,
 	doodles_popup_button_set_open(btn, FALSE);
 	
 	// Redraw newly chosen color
+	gtk_widget_queue_draw(GTK_WIDGET(btn));
+}
+
+
+// Scale popup button
+static GtkWidget*
+create_scale_button(gdouble value, gdouble min, gdouble max, gdouble step)
+{
+	// Create scale
+	GtkWidget* scale = gtk_scale_new_with_range(GTK_ORIENTATION_VERTICAL, min, max, step);
+	gtk_range_set_value(GTK_RANGE(scale), value);
+	gtk_range_set_inverted(GTK_RANGE(scale), TRUE);
+	
+	GValue v = G_VALUE_INIT;
+	g_value_init(&v, G_TYPE_INT);
+	g_value_set_int(&v, 150);
+	g_object_set_property(	G_OBJECT(scale),
+							"height-request",
+							&v);
+	
+	// Create button
+	DoodlesPopupButton* btn = DOODLES_POPUP_BUTTON(doodles_popup_button_new(scale));
+	doodles_popup_button_set_draw_func(btn, scale_button_draw);
+	doodles_popup_button_set_toggle(btn, FALSE);
+	
+	// Connect signals
+	g_signal_connect(	scale,
+						"value-changed",
+						G_CALLBACK(scale_button_on_value_changed),
+						btn);
+	
+	// Done
+	return GTK_WIDGET(btn);
+}
+static void
+scale_button_draw(	DoodlesPopupButton*	button,
+					GtkSnapshot*		snap,
+					gdouble				w,
+					gdouble				h)
+{
+	GtkWidget* scale = doodles_popup_button_get_popover_child(button);
+	GtkAdjustment* adj = gtk_range_get_adjustment(GTK_RANGE(scale));
+	gdouble value = gtk_range_get_value(GTK_RANGE(scale));
+	gdouble min = gtk_adjustment_get_lower(adj);
+	gdouble max = gtk_adjustment_get_upper(adj);
+	
+	gdouble mult = (value / (max - min)) * 0.75 + 0.25;
+	
+	
+	cairo_t* cairo = gtk_snapshot_append_cairo(	snap,
+												&GRAPHENE_RECT_INIT(0, 0, w, h));
+	
+	
+	cairo_set_source_rgb(cairo, 0.2, 0.2, 0.2);
+	cairo_arc(	cairo,
+				w / 2, h / 2,
+				w * 0.4 * mult,
+				0, G_PI * 2);
+	cairo_fill(cairo);
+	
+	
+	cairo_destroy(cairo);
+}
+static void
+scale_button_on_value_changed(	GtkRange*	range,
+								gpointer	user_data)
+{
+	// Round
+	GtkAdjustment* adj = gtk_range_get_adjustment(range);
+	gdouble step = gtk_adjustment_get_step_increment(adj);
+	gdouble length = gtk_adjustment_get_upper(adj) - gtk_adjustment_get_lower(adj);
+	
+	gdouble value = gtk_range_get_value(range) - gtk_adjustment_get_lower(adj);
+	value = value / step;
+	value = ((value - floor(value)) >= 0.5 ? ceil(value) : floor(value));
+	value = value * step + gtk_adjustment_get_lower(adj);
+	
+	gtk_adjustment_set_value(adj, value);
+	
+	
+	// Redraw
+	DoodlesPopupButton* btn = (DoodlesPopupButton*)user_data;
+	
 	gtk_widget_queue_draw(GTK_WIDGET(btn));
 }
 
