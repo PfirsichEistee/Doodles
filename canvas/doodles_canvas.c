@@ -15,6 +15,7 @@ struct _DoodlesCanvas
 	
 	gdouble				width;
 	gdouble				height;
+	gint				background;
 	DoodlesCanvas*		child_canvas;
 	
 	// Methods (NULL if should be ignored) (return TRUE if skip default function)
@@ -31,17 +32,29 @@ static DoodlesCanvasClass* class_pointer;
 
 
 // Prototypes
-static void dispose(GObject* object);
-static GtkSizeRequestMode get_request_mode(GtkWidget* self);
-static void measure (	GtkWidget*		self,
-						GtkOrientation	orientation,
-						gint			for_size,
-						gint*			minimum,
-						gint*			natural,
-						gint*			minimum_baseline,
-						gint*			natural_baseline);
-static void snapshot(	GtkWidget*		self_widget,
-						GtkSnapshot*	snap);
+static void
+dispose(GObject* object);
+
+static GtkSizeRequestMode
+get_request_mode(GtkWidget* self);
+
+static void
+measure (	GtkWidget*		self,
+			GtkOrientation	orientation,
+			gint			for_size,
+			gint*			minimum,
+			gint*			natural,
+			gint*			minimum_baseline,
+			gint*			natural_baseline);
+
+static void
+snapshot(	GtkWidget*		self_widget,
+			GtkSnapshot*	snap);
+
+static void
+doodles_canvas_draw_background	(	cairo_t*	cairo,
+									gdouble w, gdouble h,
+									int			bg_type);
 
 
 
@@ -70,6 +83,10 @@ doodles_canvas_instance_init(	GTypeInstance*	instance,
 {
 	DoodlesCanvas* self = DOODLES_CANVAS(instance);
 	
+	self->background = BG_NONE;
+	self->child_canvas = NULL,
+	self->draw = NULL;
+	self->draw_user_data = NULL;
 	self->data_lines = NULL;
 }
 
@@ -207,27 +224,20 @@ snapshot(	GtkWidget*		self_widget,
 			return;
 	}
 	
-	// Get size
-	gdouble w = gtk_widget_get_width(self_widget);
-	gdouble h = gtk_widget_get_height(self_widget);
 	
-	// Draw background
-	GdkRGBA red;
-	gdk_rgba_parse(&red, "#CCCCCC66");
-	
-	gtk_snapshot_append_color(	snap,
-								&red,
-								&GRAPHENE_RECT_INIT(0, 0, w, h));
-	
-	
-	
-	// DRAW CONTENT //
-	w = doodles_canvas_get_width(self);
-	h = doodles_canvas_get_height(self);
+	// DRAW //
+	gdouble w = doodles_canvas_get_width(self);
+	gdouble h = doodles_canvas_get_height(self);
 	gdouble m = doodles_canvas_get_pixel_per_cm();
 	cairo_t* cairo = gtk_snapshot_append_cairo(	snap,
 												&GRAPHENE_RECT_INIT(0, 0, w*m, h*m));
 	
+	// Background
+	doodles_canvas_draw_background	(	cairo,
+										w, h,
+										self->background);
+	
+	// Content
 	if (self->data_lines != NULL)
 	{
 		STR_LIST* list = self->data_lines;
@@ -314,6 +324,19 @@ doodles_canvas_get_height(DoodlesCanvas* self)
 	return self->height;
 }
 
+void
+doodles_canvas_set_background(	DoodlesCanvas*	self,
+								int				bg_type)
+{
+	self->background = bg_type;
+}
+
+STR_LIST*
+doodles_canvas_get_data_lines(DoodlesCanvas* self)
+{
+	return self->data_lines;
+}
+
 
 // DATA
 
@@ -384,7 +407,81 @@ doodles_canvas_add_line(	DoodlesCanvas*	self,
 		return;
 	}
 	
-	// Get bounding box
+	// Set values
+	line->size = size;
+	
+	line->r = r;
+	line->g = g;
+	line->b = b;
+	line->a = a;
+	
+	line->points = point_list;
+	line->points_length = point_list_size;
+	
+	doodles_canvas_line_calc_bounds(line);
+	
+	
+	// Attach line to list
+	list->data = line;
+}
+
+void
+doodles_canvas_remove_line(	DoodlesCanvas*	self,
+							STR_LINE*		line)
+{
+	STR_LIST* list = self->data_lines;
+	
+	// Free points
+	for (gint i = 0; i < line->points_length; i++)
+	{
+		free(line->points[i]);
+	}
+	free(line->points);
+	
+	
+	// Free list & lines & update self->data_lines
+	if (list->data == line)
+	{
+		// First entry is line
+		
+		if (list->next == NULL)
+		{
+			// Line is the only element
+			
+			self->data_lines = NULL;
+			free(line);
+			free(list);
+		}
+		else
+		{
+			// There are more elements in the list
+			
+			self->data_lines = list->next;
+			free(line);
+			free(list);
+		}
+	}
+	else
+	{
+		// Look for line
+		while ((list->next)->data != line)
+			list = list->next;
+		
+		// Update connection
+		STR_LIST* ph = list->next;
+		list->next = ph->next;
+		
+		free(line);
+		free(ph);
+	}
+}
+
+void
+doodles_canvas_line_calc_bounds(STR_LINE* line)
+{
+	STR_POINT** point_list = line->points;
+	gint point_list_size = line->points_length;
+	
 	STR_POINT* pnt = point_list[0];
 	gdouble min_x = pnt->x;
 	gdouble min_y = pnt->y;
@@ -406,25 +503,11 @@ doodles_canvas_add_line(	DoodlesCanvas*	self,
 			max_y = pnt->y;
 	}
 	
-	// Set values
+	// Update values
 	line->x = min_x;
 	line->y = min_y;
 	line->w = max_x - min_x;
 	line->h = max_y - min_y;
-	
-	line->size = size;
-	
-	line->r = r;
-	line->g = g;
-	line->b = b;
-	line->a = a;
-	
-	line->points = point_list;
-	line->points_length = point_list_size;
-	
-	
-	// Attach line to list
-	list->data = line;
 }
 
 
@@ -464,4 +547,43 @@ doodles_canvas_draw_line(	cairo_t* cairo,
 	
 	cairo_move_to(cairo, x1, y1);
 	cairo_line_to(cairo, x2, y2);
+}
+
+static void
+doodles_canvas_draw_background	(	cairo_t*	cairo,
+									gdouble w, gdouble h,
+									int			bg_type)
+{
+	if (bg_type == BG_NONE)
+		return;
+	
+	w *= doodles_canvas_get_pixel_per_cm();
+	h *= doodles_canvas_get_pixel_per_cm();
+	gdouble ppc = doodles_canvas_get_pixel_per_cm();
+	
+	cairo_rectangle(cairo, 0, 0, w, h);
+	cairo_set_source_rgb(cairo, 1, 1, 1);
+	cairo_fill(cairo);
+	
+	
+	switch (bg_type)
+	{
+		case (BG_CHECKERED):
+			for (int x = 0; x < floor(w / ppc); x++)
+			{
+				cairo_move_to(cairo, (((int)w % (int)ppc) / 2) + ppc * x, 0);
+				cairo_line_to(cairo, (((int)w % (int)ppc) / 2) + ppc * x, h);
+			}
+			for (int y = 0; y < floor(h / ppc); y++)
+			{
+				cairo_move_to(cairo, 0, (((int)h % (int)ppc) / 2) + ppc * y);
+				cairo_line_to(cairo, w, (((int)h % (int)ppc) / 2) + ppc * y);
+			}
+			break;
+	}
+	
+	cairo_set_source_rgb(cairo, 0.7, 0.7, 0.7);
+	cairo_set_line_width(cairo, 0.05 * ppc);
+	cairo_set_line_cap(cairo, CAIRO_LINE_CAP_BUTT);
+	cairo_stroke(cairo);
 }

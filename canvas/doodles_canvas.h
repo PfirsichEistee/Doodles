@@ -23,35 +23,78 @@ typedef struct _DoodlesCanvas		DoodlesCanvas;
 typedef struct _DoodlesCanvasClass	DoodlesCanvasClass;
 
 
+// Enums
+enum background {
+	BG_NONE = 0,
+	BG_EMPTY,
+	BG_CHECKERED,
+	BG_LINED
+};
+
+
 // Prototypes
-GType doodles_canvas_get_type();
-DoodlesCanvas* doodles_canvas_new(	gdouble pWidth,
-									gdouble pHeight);
-void doodles_canvas_set_child(	DoodlesCanvas*	self,
-								DoodlesCanvas*	child);
-DoodlesCanvasClass* doodles_canvas_get_class();
-void doodles_canvas_set_draw(	DoodlesCanvas* self,
-								gboolean	(*draw)(	GtkWidget*		self,
-														GtkSnapshot*	snap,
-														gpointer		user_data),
-								gpointer	user_data);
-gdouble doodles_canvas_get_pixel_per_cm();
-gdouble doodles_canvas_get_width(DoodlesCanvas* self);
-gdouble doodles_canvas_get_height(DoodlesCanvas* self);
-void doodles_canvas_draw_circle(	cairo_t* cairo,
-									gdouble x, gdouble y,
-									gdouble radius,
-									gboolean fill,
-									gdouble r, gdouble g, gdouble b, gdouble a);
-void doodles_canvas_draw_line(	cairo_t* cairo,
-								gdouble x1, gdouble y1,
-								gdouble x2, gdouble y2);
+GType
+doodles_canvas_get_type();
+
+DoodlesCanvas*
+doodles_canvas_new(	gdouble pWidth,
+					gdouble pHeight);
+
+void
+doodles_canvas_set_child(	DoodlesCanvas*	self,
+							DoodlesCanvas*	child);
+
+DoodlesCanvasClass*
+doodles_canvas_get_class();
+
+void
+doodles_canvas_set_draw(	DoodlesCanvas* self,
+							gboolean	(*draw)(	GtkWidget*		self,
+													GtkSnapshot*	snap,
+													gpointer		user_data),
+							gpointer	user_data);
+
+gdouble
+doodles_canvas_get_pixel_per_cm();
+
+gdouble
+doodles_canvas_get_width(DoodlesCanvas* self);
+
+gdouble
+doodles_canvas_get_height(DoodlesCanvas* self);
+
+void
+doodles_canvas_set_background(	DoodlesCanvas*	self,
+								int				bg_type);
+
+STR_LIST*
+doodles_canvas_get_data_lines(DoodlesCanvas* self);
+
+void
+doodles_canvas_draw_circle(	cairo_t* cairo,
+							gdouble x, gdouble y,
+							gdouble radius,
+							gboolean fill,
+							gdouble r, gdouble g, gdouble b, gdouble a);
+
+void
+doodles_canvas_draw_line(	cairo_t* cairo,
+							gdouble x1, gdouble y1,
+							gdouble x2, gdouble y2);
+
 void
 doodles_canvas_add_line(	DoodlesCanvas*	self,
 							STR_POINT**		point_list,
 							guint			point_list_size,
 							gdouble			size,
 							gdouble r, gdouble g, gdouble b, gdouble a);
+
+void
+doodles_canvas_remove_line(	DoodlesCanvas*	self,
+							STR_LINE*		line);
+
+void
+doodles_canvas_line_calc_bounds(STR_LINE* line);
 
 
 

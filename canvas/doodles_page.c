@@ -24,6 +24,8 @@ struct _DoodlesPage
 	guchar					mouse_pressed[3];
 	gdouble					cursor_x;
 	gdouble					cursor_y;
+	gdouble					prev_cursor_x;
+	gdouble					prev_cursor_y;
 	gpointer				tool_data;
 };
 
@@ -59,6 +61,8 @@ doodles_page_instance_init(	GTypeInstance*	instance,
 	
 	self->cursor_x = 0;
 	self->cursor_y = 0;
+	self->prev_cursor_x = 0;
+	self->prev_cursor_y = 0;
 	
 	for (guchar i = 0; i < 3; i++)
 		self->mouse_pressed[i] = FALSE;
@@ -112,6 +116,8 @@ doodles_page_new(	DoodlesGuiController*	controller,
 	self->layer_pen = doodles_canvas_new(pWidth, pHeight);
 	self->layer_graphics = doodles_canvas_new(pWidth, pHeight);
 	self->layer_background = doodles_canvas_new(pWidth, pHeight);
+	doodles_canvas_set_background(	self->layer_background,
+									BG_CHECKERED);
 	
 	doodles_canvas_set_child(	self->layer_work,
 								self->layer_highlighter);
@@ -306,6 +312,253 @@ pen_event(	DoodlesPage*	self,
 }
 
 
+static gdouble
+dist_to_line(	gdouble sx, gdouble sy,
+				gdouble ex, gdouble ey,
+				gdouble px, gdouble py)
+{
+	// Point?
+	if (sx == ex && sy == ey)
+		return sqrt( (sx - px)*(sx - px) + (sy - py)*(sy - py) );
+	
+	// Prepare distances to borders
+	gdouble dis_a = sqrt( (sx - px)*(sx - px) + (sy - py)*(sy - py) );
+	gdouble dis_b = sqrt( (ex - px)*(ex - px) + (ey - py)*(ey - py) );
+	gdouble dis_short = (dis_a < dis_b ? dis_a : dis_b);
+	
+	// Horizontal/Vertical line?
+	if (sx == ex)
+	{
+		if (py >= sy && py <= ey || py >= ey && py <= sy)
+			return fabs( sx - px );
+		else
+			return dis_short;
+	}
+	else if (sy == ey)
+	{
+		if (px >= sx && px <= ex || px >= ex && px <= sx)
+			return fabs( sy - py );
+		else
+			return dis_short;
+	}
+	
+	// Curve
+	gdouble m = (ey - sy) / (ex - sx);
+	gdouble b = sy - ( m * sx );
+	gdouble pnt_m = -1.0 / m;
+	gdouble pnt_b = py - ( pnt_m * px );
+	
+	// line is orthogonal to pnt-line
+	
+	// Cut-point
+	gdouble cut_x = ( b - pnt_b ) / ( pnt_m - m );
+	gdouble cut_y = m * cut_x + b;
+	
+	// Cut between lines?
+	if (cut_x >= sx && cut_x <= ex || cut_x >= ex && cut_x <= sx)
+	{
+		return sqrt( (cut_x - px)*(cut_x - px) + (cut_y - py)*(cut_y - py) );
+	}
+	
+	// ...Otherwise get shortest distance between the end-points
+	return dis_short;
+}
+
+
+static void
+erase_line_from_list(	gdouble sx, gdouble sy,
+						gdouble ex, gdouble ey,
+						gdouble			radius,
+						STR_LIST*		list,
+						DoodlesCanvas*	canvas)
+{
+	// list->data is a STR_LINE
+	
+	while (list != NULL)
+	{
+		STR_LINE* line = list->data;
+		
+		// In bouding box?
+		if ((sx + radius) >= line->x && (sx - radius) <= (line->x + line->w) || (ex + radius) >= line->x && (ex - radius) <= (line->x + line->w))
+		{
+			if ((sy + radius) >= line->y && (sy - radius) <= (line->y + line->h) || (ey + radius) >= line->y && (ey - radius) <= (line->y + line->h))
+			{
+				// Check all points
+				for (int i = 0; i < line->points_length; i++)
+				{
+					STR_POINT* pnt = line->points[i];
+					gdouble dis = dist_to_line(	sx, sy,
+												ex, ey,
+												pnt->x, pnt->y);
+					
+					
+					if (dis <= radius)
+					{
+						pnt->x = -1000;
+						pnt->y = -1000;
+					}
+				}
+				
+				
+				// Remove points at (-1000|-1000)
+				gint cut_start = -1;
+				for (int i = 0; i < line->points_length; i++)
+				{
+					STR_POINT* pnt = line->points[i];
+					
+					if (pnt->x == -1000 && pnt->y == -1000)
+					{
+						if (cut_start == -1)
+						{
+							cut_start = i;
+						}
+					}
+					else if (cut_start != -1)
+					{
+						gint cut_end = i; // excluded!
+						
+						if (cut_start == 0)
+						{
+							// Remove first few points -> no new line needed
+							gint new_length = line->points_length - (cut_end - cut_start);
+							
+							// Already empty?
+							if (new_length == 0)
+							{
+								cut_start = -1;
+								doodles_canvas_remove_line(	canvas,
+															line);
+								break;
+							}
+							
+							STR_POINT** new_points = malloc(sizeof(STR_POINT*) * new_length);
+							
+							if (new_points == NULL)
+								return;
+							
+							for (gint k = 0; k < cut_end; k++)
+							{
+								free(line->points[k]);
+							}
+							
+							// Save other points...
+							for (gint k = cut_end; k < line->points_length; k++)
+							{
+								new_points[k - cut_end] = line->points[k];
+							}
+							
+							// Replace list
+							free(line->points);
+							line->points = new_points;
+							line->points_length = new_length;
+							doodles_canvas_line_calc_bounds(line);
+						}
+						else
+						{
+							// Cut out points and insert new line
+							gint replace_length = cut_start;
+							
+							// Already empty?
+							if (replace_length == 0)
+							{
+								cut_start = -1;
+								doodles_canvas_remove_line(	canvas,
+															line);
+								break;
+							}
+							
+							STR_POINT** replace_points = malloc(sizeof(STR_POINT*) * replace_length);
+							
+							gint new_length = line->points_length - cut_end;
+							STR_POINT** new_points = malloc(sizeof(STR_POINT*) * new_length); // cant be empty because of exclusion
+							
+							if (replace_points == NULL || new_points == NULL)
+								return;
+							
+							// Free deleted points
+							for (gint k = cut_start; k < cut_end; k++)
+							{
+								free(line->points[k]);
+							}
+							
+							// Save replace points
+							for (gint k = 0; k < cut_start; k++)
+							{
+								replace_points[k] = line->points[k];
+							}
+							
+							// Save new points
+							for (gint k = cut_end; k < line->points_length; k++)
+							{
+								new_points[k - cut_end] = line->points[k];
+							}
+							
+							// Replace list
+							free(line->points);
+							line->points = replace_points;
+							line->points_length = replace_length;
+							doodles_canvas_line_calc_bounds(line);
+							
+							// Insert new list
+							doodles_canvas_add_line(	canvas,
+														new_points,
+														new_length,
+														line->size,
+														line->r, line->g, line->b, line->a);
+						}
+						
+						// Clear
+						cut_start = -1;
+					}
+				}
+				
+				// Cut off tail?
+				if (cut_start != -1)
+				{
+					// Cut out points and insert new line
+					gint replace_length = cut_start;
+					
+					// Already empty?
+					if (replace_length == 0)
+					{
+						doodles_canvas_remove_line(	canvas,
+													line);
+						break;
+					}
+					
+					STR_POINT** replace_points = malloc(sizeof(STR_POINT*) * replace_length);
+					
+					if (replace_points == NULL)
+						return;
+					
+					// Free deleted points
+					for (gint k = cut_start; k < line->points_length; k++)
+					{
+						free(line->points[k]);
+					}
+					
+					// Save replace points
+					for (gint k = 0; k < cut_start; k++)
+					{
+						replace_points[k] = line->points[k];
+					}
+					
+					// Replace list
+					free(line->points);
+					line->points = replace_points;
+					line->points_length = replace_length;
+					doodles_canvas_line_calc_bounds(line);
+				}
+			}
+		}
+		
+		
+		// Next
+		list = list->next;
+	}
+}
+
+
 static gboolean
 eraser_event(	DoodlesPage*	self,
 				GdkEvent*		event,
@@ -313,27 +566,22 @@ eraser_event(	DoodlesPage*	self,
 {
 	switch (gdk_event_get_event_type(event))
 	{
-		case (GDK_ENTER_NOTIFY):
-			break;
-		case (GDK_LEAVE_NOTIFY):
-			break;
-		case (GDK_MOTION_NOTIFY):
-			if (!self->mouse_pressed[0] && (crs_x >= doodles_canvas_get_width(self->layer_work) || crs_y >= doodles_canvas_get_height(self->layer_work)))
-				return FALSE;
-			
-			self->cursor_x = crs_x;
-			self->cursor_y = crs_y;
-			
-			
-			gtk_widget_queue_draw(GTK_WIDGET(self->layer_work));
-			break;
 		case (GDK_BUTTON_PRESS):
-			
-			gtk_widget_queue_draw(GTK_WIDGET(self->layer_work));
-			break;
 		case (GDK_BUTTON_RELEASE):
+		case (GDK_MOTION_NOTIFY):
+			if (self->mouse_pressed[0] == TRUE || gdk_event_get_event_type(event) == GDK_BUTTON_RELEASE && gdk_button_event_get_button(event) == 1)
+			{
+				erase_line_from_list(	self->prev_cursor_x, self->prev_cursor_y,
+										self->cursor_x, self->cursor_y,
+										doodles_gui_controller_get_size(self->gui_controller),
+										doodles_canvas_get_data_lines(self->layer_pen),
+										self->layer_pen);
+				
+				gtk_widget_queue_draw(GTK_WIDGET(self->layer_pen));
+			}
 			
 			gtk_widget_queue_draw(GTK_WIDGET(self->layer_work));
+			
 			break;
 	}
 	
@@ -348,14 +596,16 @@ on_legacy_event(	GtkEventControllerLegacy*	event_controller,
 {
 	DoodlesPage* self = DOODLES_PAGE(user_data);
 	
+	// No tool selected?
 	if (doodles_gui_controller_get_tool(self->gui_controller) == 0)
 		return FALSE;
 	
-	
+	// Get mouse pos relative to root
 	gdouble evt_x, evt_y;
 	gdouble crs_x, crs_y;
 	gdk_event_get_position(event, &evt_x, &evt_y);
 	
+	// Translate mouse pos to be relative to canvas
 	GtkWidget* root = GTK_WIDGET(gtk_widget_get_root(GTK_WIDGET(self->layer_work)));
 	
 	gtk_widget_translate_coordinates(	root,
@@ -363,20 +613,50 @@ on_legacy_event(	GtkEventControllerLegacy*	event_controller,
 										evt_x, evt_y,
 										&crs_x, &crs_y);
 	
+	// From pixel to cm
 	pos_to_cm(&crs_x, &crs_y);
 	
-	
-	switch (doodles_gui_controller_get_tool(self->gui_controller))
+	// Update mouse-variables
+	switch (gdk_event_get_event_type(event))
 	{
-		case (TOOL_PEN):
-		case (TOOL_HIGHLIGHTER):
-			return pen_event(	self,
-								event,
-								crs_x, crs_y);
-		case (TOOL_ERASER):
-			return eraser_event(	self,
+		case (GDK_BUTTON_PRESS):
+			self->prev_cursor_x = crs_x;
+			self->prev_cursor_y = crs_y;
+			self->cursor_x = crs_x;
+			self->cursor_y = crs_y;
+			self->mouse_pressed[gdk_button_event_get_button(event) - 1] = TRUE;
+			break;
+		case (GDK_BUTTON_RELEASE):
+			self->prev_cursor_x = crs_x;
+			self->prev_cursor_y = crs_y;
+			self->cursor_x = crs_x;
+			self->cursor_y = crs_y;
+			self->mouse_pressed[gdk_button_event_get_button(event) - 1] = FALSE;
+			break;
+		case (GDK_MOTION_NOTIFY):
+			self->prev_cursor_x = self->cursor_x;
+			self->prev_cursor_y = self->cursor_y;
+			self->cursor_x = crs_x;
+			self->cursor_y = crs_y;
+			break;
+	}
+	
+	// Position inside range?
+	if (crs_x <= doodles_canvas_get_width(self->layer_work) && crs_y <= doodles_canvas_get_height(self->layer_work))
+	{
+		// Call tool event
+		switch (doodles_gui_controller_get_tool(self->gui_controller))
+		{
+			case (TOOL_PEN):
+			case (TOOL_HIGHLIGHTER):
+				return pen_event(	self,
 									event,
 									crs_x, crs_y);
+			case (TOOL_ERASER):
+				return eraser_event(	self,
+										event,
+										crs_x, crs_y);
+		}
 	}
 	
 	
