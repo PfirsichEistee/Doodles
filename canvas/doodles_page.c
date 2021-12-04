@@ -15,6 +15,7 @@ struct _DoodlesPage
 	
 	// Layers
 	DoodlesCanvas*			layer_work;
+	DoodlesCanvas*			layer_highlighter;
 	DoodlesCanvas*			layer_pen;
 	DoodlesCanvas*			layer_graphics;
 	DoodlesCanvas*			layer_background;
@@ -107,11 +108,15 @@ doodles_page_new(	DoodlesGuiController*	controller,
 	
 	// LAYERS
 	self->layer_work = doodles_canvas_new(pWidth, pHeight);
+	self->layer_highlighter = doodles_canvas_new(pWidth, pHeight);
 	self->layer_pen = doodles_canvas_new(pWidth, pHeight);
 	self->layer_graphics = doodles_canvas_new(pWidth, pHeight);
 	self->layer_background = doodles_canvas_new(pWidth, pHeight);
 	
 	doodles_canvas_set_child(	self->layer_work,
+								self->layer_highlighter);
+	
+	doodles_canvas_set_child(	self->layer_highlighter,
 								self->layer_pen);
 	
 	doodles_canvas_set_child(	self->layer_pen,
@@ -159,13 +164,13 @@ dispose(GObject* object)
 // TOOL EVENTS //
 /////////////////
 
-
-
 static gboolean
 pen_event(	DoodlesPage*	self,
 			GdkEvent*		event,
 			gdouble crs_x, gdouble crs_y)
 {
+	// pen_event is for both pen & highlighter, as they have the same function anyways
+
 	switch (gdk_event_get_event_type(event))
 	{
 		case (GDK_ENTER_NOTIFY):
@@ -251,19 +256,34 @@ pen_event(	DoodlesPage*	self,
 					i = i->next;
 				}
 				
-				STR_POINT* ph = ((GSList*)self->tool_data)->data;
-				
 				
 				// Save new line
 				GdkRGBA color;
 				doodles_gui_controller_get_color(self->gui_controller, &color);
-				doodles_canvas_add_line(	self->layer_pen,
-											point_list,
-											cnt,
-											doodles_gui_controller_get_size(self->gui_controller),
-											color.red, color.green, color.blue, 1.0);
 				
-				gtk_widget_queue_draw(GTK_WIDGET(self->layer_pen));
+				switch (doodles_gui_controller_get_tool(self->gui_controller))
+				{
+					case (TOOL_PEN):
+						// Save as pen data
+						doodles_canvas_add_line(	self->layer_pen,
+													point_list,
+													cnt,
+													doodles_gui_controller_get_size(self->gui_controller),
+													color.red, color.green, color.blue, 1.0);
+						
+						gtk_widget_queue_draw(GTK_WIDGET(self->layer_pen));
+						break;
+					case (TOOL_HIGHLIGHTER):
+						// Save as highlighter data
+						doodles_canvas_add_line(	self->layer_highlighter,
+													point_list,
+													cnt,
+													doodles_gui_controller_get_size(self->gui_controller),
+													color.red, color.green, color.blue, 0.25);
+						
+						gtk_widget_queue_draw(GTK_WIDGET(self->layer_pen));
+						break;
+				}
 				
 				
 				// Free data
@@ -348,11 +368,12 @@ on_legacy_event(	GtkEventControllerLegacy*	event_controller,
 	
 	switch (doodles_gui_controller_get_tool(self->gui_controller))
 	{
-		case (1): // TOOL_PEN
+		case (TOOL_PEN):
+		case (TOOL_HIGHLIGHTER):
 			return pen_event(	self,
 								event,
 								crs_x, crs_y);
-		case (3): // TOOL_ERASER
+		case (TOOL_ERASER):
 			return eraser_event(	self,
 									event,
 									crs_x, crs_y);
@@ -407,16 +428,15 @@ on_draw(	GtkWidget*		widget,
 			point = list->data;
 			doodles_canvas_draw_line(	cairo,
 										lx, ly,
-										point->x, point->y,
-										color.red,
-										color.green,
-										color.blue,
-										color.alpha);
+										point->x, point->y);
 			
 			lx = point->x;
 			ly = point->y;
 			list = list->next;
 		}
+		
+		cairo_set_source_rgba(cairo, color.red, color.green, color.blue, color.alpha);
+		cairo_stroke(cairo);
 	}
 	
 	// Draw tool

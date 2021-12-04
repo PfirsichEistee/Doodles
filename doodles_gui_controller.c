@@ -342,7 +342,7 @@ make_tool_highlighter_box(ToolContainer* container)
 	GtkWidget* clr3 = create_color_button(0.4, 0.4, 1.0);
 	doodles_popup_button_set_state(DOODLES_POPUP_BUTTON(clr1), TRUE);
 	
-	GtkWidget* scale = create_scale_button(0.1, 0.05, 0.2, 0.01);
+	GtkWidget* scale = create_scale_button(0.4, 0.1, 1, 0.05);
 	
 	
 	container->box_children = g_list_append(NULL, clr1);
@@ -384,7 +384,7 @@ make_tool_eraser_box(ToolContainer* container)
 	container->box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 	
 	// Child list
-	GtkWidget* scale = create_scale_button(0.1, 0.05, 0.2, 0.01);
+	GtkWidget* scale = create_scale_button(0.4, 0.1, 1, 0.05);
 	
 	container->box_children = g_list_append(NULL, scale);
 	
@@ -491,10 +491,12 @@ void
 doodles_gui_controller_get_color(	DoodlesGuiController*	self,
 									GdkRGBA*				color)
 {
+	GList* list;
+	
 	switch (self->current_tool)
 	{
 		case (TOOL_PEN):
-			GList* list = g_list_first(self->tool_pen->box_children);
+			list = g_list_first(self->tool_pen->box_children);
 			for (guint i = 0; i < 3; i++)
 			{
 				if (doodles_popup_button_get_state(DOODLES_POPUP_BUTTON(list->data)))
@@ -507,8 +509,21 @@ doodles_gui_controller_get_color(	DoodlesGuiController*	self,
 				
 				list = list->next;
 			}
-			
-			//break;
+		case (TOOL_HIGHLIGHTER):
+			list = g_list_first(self->tool_highlighter->box_children);
+			for (guint i = 0; i < 3; i++)
+			{
+				if (doodles_popup_button_get_state(DOODLES_POPUP_BUTTON(list->data)))
+				{
+					GtkWidget* color_chooser = doodles_popup_button_get_popover_child(DOODLES_POPUP_BUTTON(list->data));
+					gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(color_chooser), color);
+					color->alpha = 0.25;
+					
+					return;
+				}
+				
+				list = list->next;
+			}
 		default:
 			color->red = 0.0;
 			color->green = 0.0;

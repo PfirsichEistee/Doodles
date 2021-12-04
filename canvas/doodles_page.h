@@ -5,6 +5,7 @@
 // Includes
 #include<adwaita.h>
 #include "doodles_canvas.h"
+#include "../doodles_gui_controller.h"
 #include "../misc/datastructs.h"
 
 
@@ -33,10 +34,10 @@ void doodles_page_config_set_color(gdouble r, gdouble g, gdouble b);
 void doodles_page_config_set_size(gdouble pSize);
 
 
-gint doodles_gui_controller_get_tool(DoodlesGuiController* self);
+/*gint doodles_gui_controller_get_tool(DoodlesGuiController* self);
 void doodles_gui_controller_get_color(	DoodlesGuiController*	self,
 										GdkRGBA*				color);
-gdouble doodles_gui_controller_get_size(DoodlesGuiController* self);
+gdouble doodles_gui_controller_get_size(DoodlesGuiController* self);*/
 
 
 #endif

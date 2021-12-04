@@ -45,8 +45,7 @@ void doodles_canvas_draw_circle(	cairo_t* cairo,
 									gdouble r, gdouble g, gdouble b, gdouble a);
 void doodles_canvas_draw_line(	cairo_t* cairo,
 								gdouble x1, gdouble y1,
-								gdouble x2, gdouble y2,
-								gdouble r, gdouble g, gdouble b, gdouble a);
+								gdouble x2, gdouble y2);
 void
 doodles_canvas_add_line(	DoodlesCanvas*	self,
 							STR_POINT**		point_list,

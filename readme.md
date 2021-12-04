@@ -1,6 +1,8 @@
-Compile with `gcc $(pkg-config --cflags --libs libadwaita-1) ./main.c ./doodles_gui_controller.c ./canvas/doodles_canvas.c ./canvas/doodles_page.c ./widgets/doodles_popup_button.c -o ./doodles -lm -ldl`
+Compile with `make`
 
-(I still need to figure out how to properly use Makefiles)
+(Ignore the text below, I'm just documenting it a bit for myself)
+
+<br/>
 
 # Canvas
 

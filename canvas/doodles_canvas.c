@@ -233,12 +233,6 @@ snapshot(	GtkWidget*		self_widget,
 		STR_LIST* list = self->data_lines;
 		do
 		{
-			/*if (list->data == NULL)
-			{
-				printf("Drawing line with data == NULL ?!\n");
-				break; // This should NOT happen!
-			}*/
-			
 			STR_LINE* line = (STR_LINE*)list->data;
 			STR_POINT** point_list = line->points;
 			
@@ -252,13 +246,14 @@ snapshot(	GtkWidget*		self_widget,
 			{
 				doodles_canvas_draw_line(	cairo,
 											pnt_x, pnt_y,
-											point_list[i]->x, point_list[i]->y,
-											line->r, line->g, line->b, line->a);
+											point_list[i]->x, point_list[i]->y);
 				
 				pnt_x = point_list[i]->x;
 				pnt_y = point_list[i]->y;
 			}
 			
+			cairo_set_source_rgba(cairo, line->r, line->g, line->b, line->a);
+			cairo_stroke(cairo);
 			
 			
 			list = list->next;
@@ -460,8 +455,7 @@ doodles_canvas_draw_circle(	cairo_t* cairo,
 void
 doodles_canvas_draw_line(	cairo_t* cairo,
 							gdouble x1, gdouble y1,
-							gdouble x2, gdouble y2,
-							gdouble r, gdouble g, gdouble b, gdouble a)
+							gdouble x2, gdouble y2)
 {
 	x1 *= doodles_canvas_get_pixel_per_cm();
 	y1 *= doodles_canvas_get_pixel_per_cm();
@@ -470,7 +464,4 @@ doodles_canvas_draw_line(	cairo_t* cairo,
 	
 	cairo_move_to(cairo, x1, y1);
 	cairo_line_to(cairo, x2, y2);
-	
-	cairo_set_source_rgba(cairo, r, g, b, a);
-	cairo_stroke(cairo);
 }

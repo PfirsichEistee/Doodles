@@ -1,23 +1,23 @@
-ADWAITA = `pkg-config --cflags --libs libadwaita-1`
+CFG = `pkg-config --cflags --libs libadwaita-1`
 
 
 all:
-	make -C misc
+	make -C widgets
 	make -C canvas
 	make doodles
 
 
-doodles: main.o doodles_gui_controller.o canvas/doodles_canvas.o canvas/doodles_page.o canvas/doodles_color_button.o
-	gcc $(ADWAITA) main.o doodles_gui_controller.o canvas/doodles_canvas.o canvas/doodles_page.o canvas/doodles_color_button.o -o doodles
+doodles: main doodles_gui_controller
+	gcc $(CFG) out/*.o -o doodles -lm -ldl
 
 
-main.o: main.c
-	gcc -c $(ADWAITA) main.c
+main: main.c
+	gcc -c $(CFG) main.c -o out/main.o
 
 
-doodles_gui_controller.o: doodles_gui_controller.c doodles_gui_controller.h
-	gcc -c $(ADWAITA) doodles_gui_controller.c
+doodles_gui_controller: doodles_gui_controller.c doodles_gui_controller.h
+	gcc -c $(CFG) doodles_gui_controller.c -o out/doodles_gui_controller.o
 
 
 clean:
-	rm -r *.o
+	rm -r out/*.o

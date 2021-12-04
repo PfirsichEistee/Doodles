@@ -1,4 +1,0 @@
-
-
-all: datastructs.h
-	
