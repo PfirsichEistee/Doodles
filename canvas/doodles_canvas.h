@@ -91,7 +91,8 @@ doodles_canvas_add_line(	DoodlesCanvas*	self,
 
 void
 doodles_canvas_remove_line(	DoodlesCanvas*	self,
-							STR_LINE*		line);
+							STR_LINE*		line,
+							gboolean		free_points);
 
 void
 doodles_canvas_line_calc_bounds(STR_LINE* line);

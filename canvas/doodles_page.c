@@ -376,6 +376,8 @@ erase_line_from_list(	gdouble sx, gdouble sy,
 	
 	while (list != NULL)
 	{
+		STR_LIST* ph_next = list->next; // list-entry might be removed, so śtore this beforehand
+		
 		STR_LINE* line = list->data;
 		
 		// In bouding box?
@@ -384,7 +386,8 @@ erase_line_from_list(	gdouble sx, gdouble sy,
 			if ((sy + radius) >= line->y && (sy - radius) <= (line->y + line->h) || (ey + radius) >= line->y && (ey - radius) <= (line->y + line->h))
 			{
 				// Check all points
-				for (int i = 0; i < line->points_length; i++)
+				gboolean has_cut = FALSE;
+				for (gint i = 0; i < line->points_length; i++)
 				{
 					STR_POINT* pnt = line->points[i];
 					gdouble dis = dist_to_line(	sx, sy,
@@ -396,165 +399,79 @@ erase_line_from_list(	gdouble sx, gdouble sy,
 					{
 						pnt->x = -1000;
 						pnt->y = -1000;
+						has_cut = TRUE;
 					}
 				}
 				
-				
-				// Remove points at (-1000|-1000)
-				gint cut_start = -1;
-				for (int i = 0; i < line->points_length; i++)
+				if (has_cut)
 				{
-					STR_POINT* pnt = line->points[i];
-					
-					if (pnt->x == -1000 && pnt->y == -1000)
+					// Remove points at (-1000|-1000)
+					gint cut_start = -1;
+					gint cut_end = -1;
+					for (gint i = (line->points_length - 1); i >= -1; i--)
 					{
-						if (cut_start == -1)
-						{
-							cut_start = i;
-						}
-					}
-					else if (cut_start != -1)
-					{
-						gint cut_end = i; // excluded!
+						// Get point
+						STR_POINT* pnt = NULL;
+						if (i != -1)
+							pnt = line->points[i];
 						
-						if (cut_start == 0)
+						// Get start&end indices
+						if (cut_end == -1 && pnt != NULL && pnt->x != -1000 && pnt->y != -1000)
 						{
-							// Remove first few points -> no new line needed
-							gint new_length = line->points_length - (cut_end - cut_start);
-							
-							// Already empty?
-							if (new_length == 0)
-							{
-								cut_start = -1;
-								doodles_canvas_remove_line(	canvas,
-															line);
-								break;
-							}
-							
+							cut_end = i;
+						}
+						else if (cut_end != -1 && (pnt == NULL || pnt->x == -1000 && pnt->y == -1000))
+						{
+							cut_start = i + 1;
+						}
+						
+						if (cut_end != -1 && cut_start != -1)
+						{
+							// Create new line from cutout
+							gint new_length = cut_end - cut_start + 1;
 							STR_POINT** new_points = malloc(sizeof(STR_POINT*) * new_length);
 							
-							if (new_points == NULL)
-								return;
-							
-							for (gint k = 0; k < cut_end; k++)
+							// Copy old values
+							for (gint k = cut_start; k <= cut_end; k++)
 							{
-								free(line->points[k]);
+								new_points[k - cut_start] = line->points[k];
 							}
 							
-							// Save other points...
-							for (gint k = cut_end; k < line->points_length; k++)
-							{
-								new_points[k - cut_end] = line->points[k];
-							}
-							
-							// Replace list
-							free(line->points);
-							line->points = new_points;
-							line->points_length = new_length;
-							doodles_canvas_line_calc_bounds(line);
-						}
-						else
-						{
-							// Cut out points and insert new line
-							gint replace_length = cut_start;
-							
-							// Already empty?
-							if (replace_length == 0)
-							{
-								cut_start = -1;
-								doodles_canvas_remove_line(	canvas,
-															line);
-								break;
-							}
-							
-							STR_POINT** replace_points = malloc(sizeof(STR_POINT*) * replace_length);
-							
-							gint new_length = line->points_length - cut_end;
-							STR_POINT** new_points = malloc(sizeof(STR_POINT*) * new_length); // cant be empty because of exclusion
-							
-							if (replace_points == NULL || new_points == NULL)
-								return;
-							
-							// Free deleted points
-							for (gint k = cut_start; k < cut_end; k++)
-							{
-								free(line->points[k]);
-							}
-							
-							// Save replace points
-							for (gint k = 0; k < cut_start; k++)
-							{
-								replace_points[k] = line->points[k];
-							}
-							
-							// Save new points
-							for (gint k = cut_end; k < line->points_length; k++)
-							{
-								new_points[k - cut_end] = line->points[k];
-							}
-							
-							// Replace list
-							free(line->points);
-							line->points = replace_points;
-							line->points_length = replace_length;
-							doodles_canvas_line_calc_bounds(line);
-							
-							// Insert new list
+							// Insert new line
 							doodles_canvas_add_line(	canvas,
 														new_points,
 														new_length,
 														line->size,
 														line->r, line->g, line->b, line->a);
+							
+							// Clear
+							cut_end = -1;
+							cut_start = -1;
 						}
+					}
+					
+					// Remove old line
+					for (gint i = 0; i < line->points_length; i++)
+					{
+						STR_POINT* pnt = line->points[i];
 						
-						// Clear
-						cut_start = -1;
+						if (pnt->x == -1000 && pnt->y == -1000)
+						{
+							free(pnt);
+						}
 					}
-				}
-				
-				// Cut off tail?
-				if (cut_start != -1)
-				{
-					// Cut out points and insert new line
-					gint replace_length = cut_start;
-					
-					// Already empty?
-					if (replace_length == 0)
-					{
-						doodles_canvas_remove_line(	canvas,
-													line);
-						break;
-					}
-					
-					STR_POINT** replace_points = malloc(sizeof(STR_POINT*) * replace_length);
-					
-					if (replace_points == NULL)
-						return;
-					
-					// Free deleted points
-					for (gint k = cut_start; k < line->points_length; k++)
-					{
-						free(line->points[k]);
-					}
-					
-					// Save replace points
-					for (gint k = 0; k < cut_start; k++)
-					{
-						replace_points[k] = line->points[k];
-					}
-					
-					// Replace list
 					free(line->points);
-					line->points = replace_points;
-					line->points_length = replace_length;
-					doodles_canvas_line_calc_bounds(line);
+					
+					doodles_canvas_remove_line(	canvas,
+												line,
+												false);
 				}
 			}
 		}
 		
 		
 		// Next
-		list = list->next;
+		list = ph_next;
 	}
 }
 
@@ -573,7 +490,13 @@ eraser_event(	DoodlesPage*	self,
 			{
 				erase_line_from_list(	self->prev_cursor_x, self->prev_cursor_y,
 										self->cursor_x, self->cursor_y,
-										doodles_gui_controller_get_size(self->gui_controller),
+										doodles_gui_controller_get_size(self->gui_controller) / 2,
+										doodles_canvas_get_data_lines(self->layer_highlighter),
+										self->layer_highlighter);
+				
+				erase_line_from_list(	self->prev_cursor_x, self->prev_cursor_y,
+										self->cursor_x, self->cursor_y,
+										doodles_gui_controller_get_size(self->gui_controller) / 2,
 										doodles_canvas_get_data_lines(self->layer_pen),
 										self->layer_pen);
 				

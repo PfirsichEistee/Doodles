@@ -427,16 +427,20 @@ doodles_canvas_add_line(	DoodlesCanvas*	self,
 
 void
 doodles_canvas_remove_line(	DoodlesCanvas*	self,
-							STR_LINE*		line)
+							STR_LINE*		line,
+							gboolean		free_points)
 {
 	STR_LIST* list = self->data_lines;
 	
 	// Free points
-	for (gint i = 0; i < line->points_length; i++)
+	if (free_points)
 	{
-		free(line->points[i]);
+		for (gint i = 0; i < line->points_length; i++)
+		{
+			free(line->points[i]);
+		}
+		free(line->points);
 	}
-	free(line->points);
 	
 	
 	// Free list & lines & update self->data_lines
