@@ -23,7 +23,6 @@ struct _DoodlesContainer
 // ...
 
 
-
 // FUNCTIONS //
 
 // Public
@@ -162,7 +161,7 @@ snapshot(	GtkWidget*		self_widget,
 	GdkRGBA red;
 	gdk_rgba_parse(&red, "red");
 	gtk_snapshot_append_color (snap, &red, &GRAPHENE_RECT_INIT(0, 0, w, h)); // DEBUG
-	//gdk_rgba_parse(&red, "blue");
+	gdk_rgba_parse(&red, "blue");
 	
 	// Draw children
 	GtkWidget* child = gtk_widget_get_first_child(self_widget);
@@ -181,7 +180,6 @@ snapshot(	GtkWidget*		self_widget,
 	gtk_snapshot_append_node(	snap,
 								gtk_snapshot_free_to_node(child_snap));
 }
-
 
 
 // Events
@@ -208,6 +206,8 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 												GTK_WIDGET(self),
 												mouse_pos_x, mouse_pos_y,
 												&mouse_pos_x, &mouse_pos_y);
+			
+			gtk_widget_queue_draw(GTK_WIDGET(self));
 			
 			break;
 		case (GDK_BUTTON_PRESS):
@@ -243,18 +243,25 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 				gdouble new_x = mouse_pos_x / self->scale;
 				gdouble new_y = mouse_pos_y / self->scale;
 				
+				
 				gdouble delta_x = (new_x - old_x);
 				gdouble delta_y = (new_y - old_y);
 				
-				// Resize widget
-				gtk_widget_queue_resize(GTK_WIDGET(self));
 				
 				// Move scrolled window
+				gdouble ph = (gtk_widget_get_width(GTK_WIDGET(self)) / old_scale) * self->scale;
+				gtk_adjustment_set_upper(gtk_scrolled_window_get_hadjustment(self->scroll_window), ph);
+				ph = (gtk_widget_get_height(GTK_WIDGET(self)) / old_scale) * self->scale;
+				gtk_adjustment_set_upper(gtk_scrolled_window_get_vadjustment(self->scroll_window), ph);
 				gdouble srl_h = gtk_adjustment_get_value(gtk_scrolled_window_get_hadjustment(self->scroll_window));
 				gdouble srl_v = gtk_adjustment_get_value(gtk_scrolled_window_get_vadjustment(self->scroll_window));
 				
 				gtk_adjustment_set_value(gtk_scrolled_window_get_hadjustment(self->scroll_window), srl_h - (delta_x * self->scale));
 				gtk_adjustment_set_value(gtk_scrolled_window_get_vadjustment(self->scroll_window), srl_v - (delta_y * self->scale));
+				
+				
+				// Resize widget
+				gtk_widget_queue_resize(GTK_WIDGET(self));
 				
 				return TRUE;
 			}
@@ -298,10 +305,10 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 					mouse_pos_y >= (alloc.y - ph_space) && mouse_pos_y < (alloc.y + alloc.height + ph_space))
 			{
 				// Get local mouse pos
-				mouse_pos_x -= alloc.x;
-				mouse_pos_y -= alloc.y;
-				mouse_pos_x /= self->scale;
-				mouse_pos_y /= self->scale;
+				gdouble ph_mouse_x = mouse_pos_x - alloc.x;
+				gdouble ph_mouse_y = mouse_pos_y - alloc.y;
+				ph_mouse_x /= self->scale;
+				ph_mouse_y /= self->scale;
 				
 				
 				// Pass event if canvas
@@ -313,8 +320,8 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 					{
 						gint ph_btn = (event_type != GDK_MOTION_NOTIFY ? gdk_button_event_get_button(event) : -1);
 						doodles_page_receive_event(	page,
-													(gdouble)mouse_pos_x,
-													(gdouble)mouse_pos_y,
+													ph_mouse_x,
+													ph_mouse_y,
 													ph_btn,
 													event_type);
 					}
