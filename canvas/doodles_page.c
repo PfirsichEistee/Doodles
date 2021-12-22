@@ -33,9 +33,6 @@ struct _DoodlesPage
 
 // Prototypes
 static void dispose(GObject* object);
-static gboolean on_legacy_event(	GtkEventControllerLegacy*	event_controller,
-									GdkEvent*					event,
-									gpointer					user_data);
 static gboolean on_draw(	GtkWidget*		widget,
 							GtkSnapshot*	snap,
 							gpointer		user_data);
@@ -98,7 +95,6 @@ doodles_page_get_type()
 	return type;
 }
 
-
 // Constructor
 DoodlesPage*
 doodles_page_new(	DoodlesGuiController*	controller,
@@ -111,11 +107,11 @@ doodles_page_new(	DoodlesGuiController*	controller,
 	self->gui_controller = controller;
 	
 	// LAYERS
-	self->layer_work = doodles_canvas_new(pWidth, pHeight);
-	self->layer_highlighter = doodles_canvas_new(pWidth, pHeight);
-	self->layer_pen = doodles_canvas_new(pWidth, pHeight);
-	self->layer_graphics = doodles_canvas_new(pWidth, pHeight);
-	self->layer_background = doodles_canvas_new(pWidth, pHeight);
+	self->layer_work = doodles_canvas_new(pWidth, pHeight, self);
+	self->layer_highlighter = doodles_canvas_new(pWidth, pHeight, self);
+	self->layer_pen = doodles_canvas_new(pWidth, pHeight, self);
+	self->layer_graphics = doodles_canvas_new(pWidth, pHeight, self);
+	self->layer_background = doodles_canvas_new(pWidth, pHeight, self);
 	doodles_canvas_set_background(	self->layer_background,
 									BG_CHECKERED);
 	
@@ -131,14 +127,23 @@ doodles_page_new(	DoodlesGuiController*	controller,
 	doodles_canvas_set_child(	self->layer_graphics,
 								self->layer_background);
 	
+	GtkWidget* phh = gtk_text_view_new();
+	//gtk_widget_set_opacity(phh, 0.5);
+	doodles_canvas_add_widget(	self->layer_graphics,
+								phh,
+								50, 50,
+								100, 50);
+	//gtk_widget_set_cursor(phh, gdk_cursor_new_from_name("default", NULL));
+	//gtk_widget_set_focusable(phh, FALSE);
+	//gtk_widget_set_sensitive(phh, FALSE);
 	
-	// Event Handler
-	GtkEventController* legacy_controller = gtk_event_controller_legacy_new();
-	g_signal_connect(	legacy_controller,
-						"event",
-						G_CALLBACK(on_legacy_event),
-						self);
-	gtk_widget_add_controller(GTK_WIDGET(self->layer_work), legacy_controller);
+	GtkCssProvider* provider = gtk_css_provider_new();
+	gtk_css_provider_load_from_data(	provider,
+										"textview { background: none; } textview text { background: none; }",
+										-1);
+	gtk_style_context_add_provider(	gtk_widget_get_style_context(phh),
+									GTK_STYLE_PROVIDER(provider),
+									GTK_STYLE_PROVIDER_PRIORITY_USER);
 	
 	
 	// Drawing Handler
@@ -170,34 +175,23 @@ dispose(GObject* object)
 // TOOL EVENTS //
 /////////////////
 
-static gboolean
+static void
 pen_event(	DoodlesPage*	self,
-			GdkEvent*		event,
-			gdouble crs_x, gdouble crs_y)
+			gint			gdk_event_button,
+			gint			gdk_event_type)
 {
 	// pen_event is for both pen & highlighter, as they have the same function anyways
 
-	switch (gdk_event_get_event_type(event))
+	switch (gdk_event_type)
 	{
-		case (GDK_ENTER_NOTIFY):
-			break;
-		case (GDK_LEAVE_NOTIFY):
-			break;
 		case (GDK_MOTION_NOTIFY):
-			if (!self->mouse_pressed[0] && (crs_x >= doodles_canvas_get_width(self->layer_work) || crs_y >= doodles_canvas_get_height(self->layer_work)))
-				return FALSE;
-			
-			self->cursor_x = crs_x;
-			self->cursor_y = crs_y;
-			
-			
 			if (self->mouse_pressed[0] && self->tool_data != NULL)
 			{
 				STR_POINT* point = malloc(sizeof(STR_POINT));
 				if (point != NULL)
 				{
-					point->x = crs_x;
-					point->y = crs_y;
+					point->x = self->cursor_x;
+					point->y = self->cursor_y;
 					
 					GSList* list = g_slist_append(self->tool_data, point);
 					
@@ -209,16 +203,13 @@ pen_event(	DoodlesPage*	self,
 			gtk_widget_queue_draw(GTK_WIDGET(self->layer_work));
 			break;
 		case (GDK_BUTTON_PRESS):
-			self->mouse_pressed[gdk_button_event_get_button(event) - 1] = TRUE;
-			
-			
-			if (gdk_button_event_get_button(event) == 1 && self->tool_data == NULL)
+			if (gdk_event_button == 1 && self->tool_data == NULL)
 			{
 				STR_POINT* point = malloc(sizeof(STR_POINT));
 				if (point != NULL)
 				{
-					point->x = crs_x;
-					point->y = crs_y;
+					point->x = self->cursor_x;
+					point->y = self->cursor_y;
 					
 					GSList* list = g_slist_append(NULL, point);
 					
@@ -229,9 +220,7 @@ pen_event(	DoodlesPage*	self,
 			gtk_widget_queue_draw(GTK_WIDGET(self->layer_work));
 			break;
 		case (GDK_BUTTON_RELEASE):
-			self->mouse_pressed[gdk_button_event_get_button(event) - 1] = FALSE;
-			
-			if (gdk_button_event_get_button(event) == 1 && self->tool_data != NULL)
+			if (gdk_event_button == 1 && self->tool_data != NULL)
 			{
 				// Create line array
 				STR_POINT** point_list = malloc(sizeof(STR_POINT*) * g_slist_length(self->tool_data));
@@ -251,7 +240,7 @@ pen_event(	DoodlesPage*	self,
 							cnt++;
 						}
 						
-						return FALSE;
+						return;
 					}
 					
 					point_list[cnt]->x = ((STR_POINT*)i->data)->x;
@@ -307,8 +296,6 @@ pen_event(	DoodlesPage*	self,
 			gtk_widget_queue_draw(GTK_WIDGET(self->layer_work));
 			break;
 	}
-	
-	return FALSE;
 }
 
 
@@ -476,17 +463,17 @@ erase_line_from_list(	gdouble sx, gdouble sy,
 }
 
 
-static gboolean
+static void
 eraser_event(	DoodlesPage*	self,
-				GdkEvent*		event,
-				gdouble crs_x, gdouble crs_y)
+				gint			gdk_event_button,
+				gint			gdk_event_type)
 {
-	switch (gdk_event_get_event_type(event))
+	switch (gdk_event_type)
 	{
 		case (GDK_BUTTON_PRESS):
 		case (GDK_BUTTON_RELEASE):
 		case (GDK_MOTION_NOTIFY):
-			if (self->mouse_pressed[0] == TRUE || gdk_event_get_event_type(event) == GDK_BUTTON_RELEASE && gdk_button_event_get_button(event) == 1)
+			if (self->mouse_pressed[0] == TRUE || gdk_event_type == GDK_BUTTON_RELEASE && gdk_event_button == 1)
 			{
 				erase_line_from_list(	self->prev_cursor_x, self->prev_cursor_y,
 										self->cursor_x, self->cursor_y,
@@ -507,110 +494,77 @@ eraser_event(	DoodlesPage*	self,
 			
 			break;
 	}
-	
-	return FALSE;
 }
 
-
-static gboolean
-on_legacy_event(	GtkEventControllerLegacy*	event_controller,
-					GdkEvent*					event,
-					gpointer					user_data)
+void
+doodles_page_receive_event(	DoodlesPage*	self,
+							gdouble			mouse_x,
+							gdouble			mouse_y,
+							gint			gdk_event_button,
+							gint			gdk_event_type)
 {
-	DoodlesPage* self = DOODLES_PAGE(user_data);
-	
 	// No tool selected?
 	if (doodles_gui_controller_get_tool(self->gui_controller) == 0)
-		return FALSE;
-	
-	// Get mouse pos relative to root
-	gdouble evt_x, evt_y;
-	gdouble crs_x, crs_y;
-	gdk_event_get_position(event, &evt_x, &evt_y);
-	
-	// Translate mouse pos to be relative to canvas
-	GtkWidget* root = GTK_WIDGET(gtk_widget_get_root(GTK_WIDGET(self->layer_work)));
-	
-	gtk_widget_translate_coordinates(	root,
-										GTK_WIDGET(self->layer_work),
-										evt_x, evt_y,
-										&crs_x, &crs_y);
+		return;
 	
 	// From pixel to cm
-	pos_to_cm(&crs_x, &crs_y);
+	pos_to_cm(&mouse_x, &mouse_y);
 	
 	// Update mouse-variables
-	switch (gdk_event_get_event_type(event))
+	switch (gdk_event_type)
 	{
 		case (GDK_BUTTON_PRESS):
-			self->prev_cursor_x = crs_x;
-			self->prev_cursor_y = crs_y;
-			self->cursor_x = crs_x;
-			self->cursor_y = crs_y;
-			self->mouse_pressed[gdk_button_event_get_button(event) - 1] = TRUE;
+			self->prev_cursor_x = mouse_x;
+			self->prev_cursor_y = mouse_y;
+			self->cursor_x = mouse_x;
+			self->cursor_y = mouse_y;
+			self->mouse_pressed[gdk_event_button - 1] = TRUE;
 			break;
 		case (GDK_BUTTON_RELEASE):
-			self->prev_cursor_x = crs_x;
-			self->prev_cursor_y = crs_y;
-			self->cursor_x = crs_x;
-			self->cursor_y = crs_y;
-			self->mouse_pressed[gdk_button_event_get_button(event) - 1] = FALSE;
+			self->prev_cursor_x = mouse_x;
+			self->prev_cursor_y = mouse_y;
+			self->cursor_x = mouse_x;
+			self->cursor_y = mouse_y;
+			self->mouse_pressed[gdk_event_button - 1] = FALSE;
 			break;
 		case (GDK_MOTION_NOTIFY):
 			self->prev_cursor_x = self->cursor_x;
 			self->prev_cursor_y = self->cursor_y;
-			self->cursor_x = crs_x;
-			self->cursor_y = crs_y;
+			self->cursor_x = mouse_x;
+			self->cursor_y = mouse_y;
 			break;
 	}
 	
-	// Position inside range?
-	if (crs_x <= doodles_canvas_get_width(self->layer_work) && crs_y <= doodles_canvas_get_height(self->layer_work))
+	// Call tool event
+	switch (doodles_gui_controller_get_tool(self->gui_controller))
 	{
-		// Call tool event
-		switch (doodles_gui_controller_get_tool(self->gui_controller))
-		{
-			case (TOOL_PEN):
-			case (TOOL_HIGHLIGHTER):
-				return pen_event(	self,
-									event,
-									crs_x, crs_y);
-			case (TOOL_ERASER):
-				return eraser_event(	self,
-										event,
-										crs_x, crs_y);
-		}
+		case (TOOL_PEN):
+		case (TOOL_HIGHLIGHTER):
+			pen_event(	self,
+								gdk_event_button,
+								gdk_event_type);
+			break;
+		case (TOOL_ERASER):
+			eraser_event(	self,
+									gdk_event_button,
+									gdk_event_type);
+			break;
 	}
-	
-	
-	return FALSE;
 }
 
 
 
 
+////////////////
+// DRAW TOOLS //
+////////////////
 
-
-
-
-
-
-
-static gboolean
-on_draw(	GtkWidget*		widget,
-			GtkSnapshot*	snap,
-			gpointer		user_data)
+static void
+on_draw_pen(	DoodlesPage*	self,
+				cairo_t*		cairo,
+				gdouble w, gdouble h,
+				gdouble			ppc) // ppc == pixel per cm
 {
-	DoodlesPage* self = DOODLES_PAGE(user_data);
-	gdouble w = doodles_canvas_get_width(self->layer_work);
-	gdouble h = doodles_canvas_get_height(self->layer_work);
-	gdouble m = doodles_canvas_get_pixel_per_cm();
-	
-	cairo_t* cairo = gtk_snapshot_append_cairo(	snap,
-												&GRAPHENE_RECT_INIT(0, 0, w*m, h*m));
-	
-	
-	
 	// Draw content
 	if (self->tool_data != NULL)
 	{
@@ -649,6 +603,35 @@ on_draw(	GtkWidget*		widget,
 								doodles_gui_controller_get_size(self->gui_controller) / 2,
 								FALSE,
 								0.7, 0.7, 0.7, 1.0);
+}
+
+static gboolean
+on_draw(	GtkWidget*		widget,
+			GtkSnapshot*	snap,
+			gpointer		user_data)
+{
+	DoodlesPage* self = DOODLES_PAGE(user_data);
+	gdouble w = doodles_canvas_get_width(self->layer_work);
+	gdouble h = doodles_canvas_get_height(self->layer_work);
+	gdouble m = doodles_canvas_get_pixel_per_cm();
+	
+	cairo_t* cairo = gtk_snapshot_append_cairo(	snap,
+												&GRAPHENE_RECT_INIT(0, 0, w*m, h*m));
+	
+	
+	switch (doodles_gui_controller_get_tool(self->gui_controller))
+	{
+		case (TOOL_PEN):
+		case (TOOL_HIGHLIGHTER):
+		case (TOOL_ERASER): // eraser has no tool_data so its alright
+			on_draw_pen(	self,
+							cairo,
+							w, h,
+							m);
+			break;
+		case (TOOL_TEXT):
+			break;
+	}
 	
 	
 	cairo_destroy(cairo);

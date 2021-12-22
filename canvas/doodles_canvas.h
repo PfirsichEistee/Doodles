@@ -2,11 +2,6 @@
 #define DOODLES_CANVAS_H
 
 
-// Includes
-#include<adwaita.h>
-#include "../misc/datastructs.h"
-
-
 // Macros
 #define DOODLES_TYPE_CANVAS				( doodles_canvas_get_type() )
 #define DOODLES_CANVAS(obj)				( G_TYPE_CHECK_INSTANCE_CAST((obj), DOODLES_TYPE_CANVAS, DoodlesCanvas) )
@@ -32,13 +27,20 @@ enum background {
 };
 
 
+// Includes
+#include<gtk/gtk.h>
+#include "../misc/datastructs.h"
+#include "doodles_page.h"
+
+
 // Prototypes
 GType
 doodles_canvas_get_type();
 
 DoodlesCanvas*
-doodles_canvas_new(	gdouble pWidth,
-					gdouble pHeight);
+doodles_canvas_new(	gdouble			pWidth,
+					gdouble			pHeight,
+					DoodlesPage*	pPage);
 
 void
 doodles_canvas_set_child(	DoodlesCanvas*	self,
@@ -56,6 +58,9 @@ doodles_canvas_set_draw(	DoodlesCanvas* self,
 
 gdouble
 doodles_canvas_get_pixel_per_cm();
+
+DoodlesPage*
+doodles_canvas_get_page(DoodlesCanvas* self);
 
 gdouble
 doodles_canvas_get_width(DoodlesCanvas* self);
@@ -93,6 +98,12 @@ void
 doodles_canvas_remove_line(	DoodlesCanvas*	self,
 							STR_LINE*		line,
 							gboolean		free_points);
+
+void
+doodles_canvas_add_widget(	DoodlesCanvas*	self,
+							GtkWidget*		widget,
+							gdouble x, gdouble y,
+							gdouble w, gdouble h);
 
 void
 doodles_canvas_line_calc_bounds(STR_LINE* line);

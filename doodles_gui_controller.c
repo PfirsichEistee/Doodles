@@ -21,17 +21,17 @@ struct _DoodlesGuiController
 	GObject			parent;
 	
 	// Private attributes
-	GtkBox*			page_box;
+	DoodlesContainer*	page_container;
 	
 	
-	guint			current_tool;
-	GtkWidget*		action_bar;
-	GtkBox*			tool_box; // tool buttons are in here
-	ToolContainer*	tool_pen;
-	ToolContainer*	tool_highlighter;
-	ToolContainer*	tool_eraser;
-	ToolContainer*	tool_text;
-	ToolContainer*	tool_selection;
+	guint				current_tool;
+	GtkWidget*			action_bar;
+	GtkBox*				tool_box; // tool buttons are in here
+	ToolContainer*		tool_pen;
+	ToolContainer*		tool_highlighter;
+	ToolContainer*		tool_eraser;
+	ToolContainer*		tool_text;
+	ToolContainer*		tool_selection;
 };
 
 
@@ -49,7 +49,12 @@ static void make_tool_highlighter_box(ToolContainer* container);
 static ToolContainer* make_tool_eraser();
 static void make_tool_eraser_box(ToolContainer* container);
 
-static ToolContainer* make_tool_text();
+static ToolContainer*
+make_tool_text();
+
+static void
+make_tool_text_box(ToolContainer* container);
+
 static ToolContainer* make_tool_selection();
 static void on_color_button_clicked(	DoodlesPopupButton* self,
 										gpointer user_data);
@@ -114,12 +119,16 @@ doodles_gui_controller_instance_init(	GTypeInstance*	instance,
 	DoodlesGuiController* self = DOODLES_GUI_CONTROLLER(instance);
 	
 	// Pages (debug)
-	self->page_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 16));
-	gtk_widget_set_margin_top(GTK_WIDGET(self->page_box), 15);
-	gtk_widget_set_margin_bottom(GTK_WIDGET(self->page_box), 15);
+	self->page_container = DOODLES_CONTAINER(doodles_container_new());
 	
 	DoodlesPage* page = doodles_page_new(self, 18, 24);
-	gtk_box_append(self->page_box, doodles_page_get_widget(page));
+	DoodlesPage* page2 = doodles_page_new(self, 24, 18);
+	DoodlesPage* page3 = doodles_page_new(self, 18, 24);
+	DoodlesPage* page4 = doodles_page_new(self, 18, 24);
+	doodles_container_insert(self->page_container, doodles_page_get_widget(page));
+	doodles_container_insert(self->page_container, doodles_page_get_widget(page2));
+	doodles_container_insert(self->page_container, doodles_page_get_widget(page3));
+	doodles_container_insert(self->page_container, doodles_page_get_widget(page4));
 	
 	
 	// Tool Box
@@ -134,11 +143,14 @@ doodles_gui_controller_instance_init(	GTypeInstance*	instance,
 	gtk_box_append(self->tool_box, (self->tool_highlighter)->button);
 	self->tool_eraser = make_tool_eraser();
 	gtk_box_append(self->tool_box, (self->tool_eraser)->button);
+	self->tool_text = make_tool_text();
+	gtk_box_append(self->tool_box, (self->tool_text)->button);
 	
 	// ..tool signals
 	g_signal_connect((self->tool_pen)->button, "clicked", G_CALLBACK(on_tool_button_clicked), self);
 	g_signal_connect((self->tool_highlighter)->button, "clicked", G_CALLBACK(on_tool_button_clicked), self);
 	g_signal_connect((self->tool_eraser)->button, "clicked", G_CALLBACK(on_tool_button_clicked), self);
+	g_signal_connect((self->tool_text)->button, "clicked", G_CALLBACK(on_tool_button_clicked), self);
 	
 	
 	// Prepare first tool
@@ -216,13 +228,14 @@ doodles_gui_controller_get_widget(DoodlesGuiController* self)
 	
 	// CONTENT VIEW //
 	
-	GtkWidget* content_clamp = adw_clamp_new(); // centers the widget (page-list)
+	//GtkWidget* content_clamp = adw_clamp_new(); // centers the widget (page-list)
 	GtkWidget* content_window = gtk_scrolled_window_new(); // scrolling
 	gtk_widget_set_vexpand(content_window, TRUE);
+	doodles_container_set_scrolled_window(self->page_container, GTK_SCROLLED_WINDOW(content_window));
 	
 	// Insert childs
-	adw_clamp_set_child(ADW_CLAMP(content_clamp), GTK_WIDGET(self->page_box));
-	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(content_window), content_clamp);
+	//adw_clamp_set_child(ADW_CLAMP(content_clamp), GTK_WIDGET(self->page_box));
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(content_window), GTK_WIDGET(self->page_container));
 	gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(content_window), 150);
 	
 	
@@ -400,7 +413,34 @@ make_tool_eraser_box(ToolContainer* container)
 static ToolContainer*
 make_tool_text()
 {
-	return NULL;
+	// Malloc container
+	ToolContainer* container = malloc(sizeof(ToolContainer)); // TODO check for NULL?
+	
+	// Button
+	container->button = gtk_toggle_button_new();
+	GtkWidget* img = gtk_image_new_from_file("files/icons/text.svg");
+	gtk_button_set_child(GTK_BUTTON(container->button), img);
+	
+	
+	return container;
+}
+static void
+make_tool_text_box(ToolContainer* container)
+{
+	container->box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	
+	// Child list
+	GtkWidget* fbtn = gtk_font_button_new_with_font("Cantarell Regular 11");
+	
+	container->box_children = g_list_append(NULL, fbtn);
+	
+	
+	// Insert to parent-widget
+	gtk_box_append(GTK_BOX(container->box), fbtn);
+	
+	
+	// Signals
+	// ...
 }
 
 static ToolContainer*
@@ -439,6 +479,7 @@ on_tool_button_clicked(	GtkButton*	button,
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON((self->tool_pen)->button), FALSE);
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON((self->tool_highlighter)->button), FALSE);
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON((self->tool_eraser)->button), FALSE);
+	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON((self->tool_text)->button), FALSE);
 	
 	// Enable active button
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
@@ -453,6 +494,8 @@ on_tool_button_clicked(	GtkButton*	button,
 		self->current_tool = TOOL_HIGHLIGHTER;
 	else if (GTK_WIDGET(button) == (self->tool_eraser)->button)
 		self->current_tool = TOOL_ERASER;
+	else if (GTK_WIDGET(button) == (self->tool_text)->button)
+		self->current_tool = TOOL_TEXT;
 	
 	// Change tool config
 	if (prev_container != NULL) {
@@ -478,6 +521,9 @@ on_tool_button_clicked(	GtkButton*	button,
 				break;
 			case (TOOL_ERASER):
 				make_tool_eraser_box(container);
+				break;
+			case (TOOL_TEXT):
+				make_tool_text_box(container);
 				break;
 		}
 		
@@ -552,6 +598,8 @@ doodles_gui_controller_get_tool_container(DoodlesGuiController* self)
 			return self->tool_highlighter;
 		case (TOOL_ERASER):
 			return self->tool_eraser;
+		case (TOOL_TEXT):
+			return self->tool_text;
 	}
 	
 	return NULL;

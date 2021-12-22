@@ -2,13 +2,6 @@
 #define DOODLES_PAGE_H
 
 
-// Includes
-#include<adwaita.h>
-#include "doodles_canvas.h"
-#include "../doodles_gui_controller.h"
-#include "../misc/datastructs.h"
-
-
 // Macros
 #define DOODLES_TYPE_PAGE				( doodles_page_get_type() )
 #define DOODLES_PAGE(obj)				( G_TYPE_CHECK_INSTANCE_CAST((obj), DOODLES_TYPE_PAGE, DoodlesPage) )
@@ -24,20 +17,37 @@ typedef struct _DoodlesPageClass		DoodlesPageClass;
 typedef struct _DoodlesGuiController	DoodlesGuiController;
 
 
+// Includes
+#include<gtk/gtk.h>
+#include "doodles_canvas.h"
+#include "../doodles_gui_controller.h"
+#include "../misc/datastructs.h"
+
+
 // Prototypes
-GType doodles_page_get_type();
-DoodlesPage* doodles_page_new(	DoodlesGuiController*	controller,
+GType
+doodles_page_get_type();
+
+DoodlesPage*
+doodles_page_new(	DoodlesGuiController*	controller,
 								gdouble					pWidth,
 								gdouble					pHeight);
-GtkWidget* doodles_page_get_widget(DoodlesPage* self);
-void doodles_page_config_set_color(gdouble r, gdouble g, gdouble b);
-void doodles_page_config_set_size(gdouble pSize);
 
+GtkWidget*
+doodles_page_get_widget(DoodlesPage* self);
 
-/*gint doodles_gui_controller_get_tool(DoodlesGuiController* self);
-void doodles_gui_controller_get_color(	DoodlesGuiController*	self,
-										GdkRGBA*				color);
-gdouble doodles_gui_controller_get_size(DoodlesGuiController* self);*/
+void
+doodles_page_config_set_color(gdouble r, gdouble g, gdouble b);
+
+void
+doodles_page_config_set_size(gdouble pSize);
+
+void
+doodles_page_receive_event(	DoodlesPage*	self,
+							gdouble			mouse_x,
+							gdouble			mouse_y,
+							gint			gdk_event_button,
+							gint			gdk_event_type);
 
 
 #endif

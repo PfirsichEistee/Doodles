@@ -1,19 +1,18 @@
-#include <adwaita.h>
+#include <gtk/gtk.h>
 #include "doodles_gui_controller.h"
-#include "canvas/doodles_text_field.h"
 
 
 /* PROTOTYPES */
 
-static void application_activate(	GtkApplication*	app,
-									gpointer		user_data);
-static gboolean application_end(	GtkApplication*	app,
-									gpointer		user_data);
+static void
+application_activate(	GtkApplication*	app,
+						gpointer		user_data);
+static gboolean
+application_end(	GtkApplication*	app,
+					gpointer		user_data);
 
 
 /* VARIABLES */
-
-DoodlesGuiController* gui_controller;
 
 
 /* FUNCTIONS */
@@ -26,10 +25,16 @@ int main(	int argc,
 	
 	int status = g_application_run(G_APPLICATION(app), argc, arg);
 	
-	g_object_unref(gui_controller);
 	g_object_unref(app);
 	
 	return status;
+}
+
+
+static void
+bs_test(GtkButton* self)
+{
+	printf("ACTIVATE\n");
 }
 
 
@@ -43,7 +48,7 @@ application_activate(	GtkApplication*	app,
 	g_signal_connect(main_window, "close-request", G_CALLBACK(application_end), NULL);
 	
 	
-	gui_controller = doodles_gui_controller_new();
+	DoodlesGuiController* gui_controller = doodles_gui_controller_new();
 	GtkWidget* controller_widget = doodles_gui_controller_get_widget(gui_controller);
 	gtk_window_set_child(GTK_WINDOW(main_window), controller_widget);
 	
@@ -56,7 +61,5 @@ static gboolean
 application_end(	GtkApplication*	app,
 					gpointer		user_data)
 {
-	doodles_gui_controller_destroy(gui_controller);
-	
 	return FALSE;
 }

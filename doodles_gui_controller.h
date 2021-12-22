@@ -3,9 +3,9 @@
 
 
 // Includes
-#include<adwaita.h>
+#include<gtk/gtk.h>
 #include "canvas/doodles_page.h"
-#include "canvas/doodles_canvas.h"
+#include "widgets/doodles_container.h"
 #include "widgets/doodles_popup_button.h"
 
 

@@ -26,5 +26,15 @@ typedef struct _STR_LIST
 	struct _STR_LIST*	next;
 } STR_LIST;
 
+typedef struct _STR_WIDGET_CONTAINER
+{
+	GtkWidget*						widget;
+	gdouble							x;
+	gdouble							y;
+	gdouble							w;
+	gdouble							h;
+	struct _STR_WIDGET_CONTAINER*	next;
+} STR_WIDGET_CONTAINER;
+
 
 #endif

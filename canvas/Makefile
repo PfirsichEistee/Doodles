@@ -1,9 +1,9 @@
-CFG = `pkg-config --cflags --libs libadwaita-1`
+CFG = `pkg-config --cflags --libs gtk4`
 
 
 all:
-	make doodles_canvas
 	make doodles_page
+	make doodles_canvas
 
 
 doodles_canvas: doodles_canvas.c doodles_canvas.h

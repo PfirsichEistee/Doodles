@@ -4,6 +4,22 @@ Compile with `make`
 
 <br/>
 
+# DoodlesContainer
+
+Vertical box that carries DoodlesPage's. Allows scaling.
+It will emit the following signals on DoodlesPage's:
+* `void cursor_pressed(int button, double x, double y)`
+* `void cursor_released(int button, double x, double y)`
+* `void cursor_clicked(int button, double x, double y)`
+* `void cursor_dragged(int button, double x, double y, double delta_x, double delta_y)`
+* (I'll worry about keyboard-signals later)
+
+TODO:
+* Scaling via user-input (currently only works through code)
+* Skip drawing on hidden widgets
+
+****
+
 # Canvas
 
 This is a widget which can hold multiple kinds of drawings.
