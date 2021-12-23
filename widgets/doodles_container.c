@@ -71,8 +71,8 @@ measure (	GtkWidget*		self_widget,
 	DoodlesContainer* self = DOODLES_CONTAINER(self_widget);
 	DoodlesContainerClass* self_class = DOODLES_CONTAINER_GET_CLASS(self);
 	
-	gint content_width = self_class->space * 4;
-	gint content_height = self_class->space;
+	gint content_width = self_class->space * 4 * self->scale;
+	gint content_height = self_class->space * self->scale;
 	
 	
 	// Measure content width
@@ -80,7 +80,6 @@ measure (	GtkWidget*		self_widget,
 	while (child != NULL)
 	{
 		gint w_width, dummy;
-		
 		gtk_widget_measure(	child,
 							GTK_ORIENTATION_HORIZONTAL,
 							-1,
@@ -89,8 +88,8 @@ measure (	GtkWidget*		self_widget,
 							&dummy,
 							&dummy);
 		
-		if (content_width < (w_width + self_class->space * 4))
-			content_width = w_width + self_class->space * 4;
+		if (content_width < (w_width + self_class->space * 4 * self->scale))
+			content_width = w_width + self_class->space * 4 * self->scale;
 		
 		child = gtk_widget_get_next_sibling(child);
 	}
@@ -122,14 +121,10 @@ measure (	GtkWidget*		self_widget,
 									&alloc,
 									-1);
 		
-		content_height += w_height + self_class->space;
+		content_height += w_height + self_class->space * self->scale;
 		
 		child = gtk_widget_get_next_sibling(child);
 	}
-	
-	// Multiply by scale
-	content_width = (gint)(content_width * self->scale);
-	content_height = (gint)(content_height * self->scale);
 	
 	// Set size
 	if (orientation == GTK_ORIENTATION_HORIZONTAL)
@@ -150,21 +145,29 @@ snapshot(	GtkWidget*		self_widget,
 {
 	DoodlesContainer* self = DOODLES_CONTAINER(self_widget);
 	
-	// Get min size
-	GtkRequisition* req = gtk_requisition_new();
-	gtk_widget_get_preferred_size(self_widget, req, NULL);
-	gint w = req->width;
-	gint h = req->height;
-	gtk_requisition_free(req);
+	// Get size
+	gint w = gtk_widget_get_width(self_widget);
+	gint h = gtk_widget_get_height(self_widget);
 	
 	// Draw
 	GdkRGBA red;
 	gdk_rgba_parse(&red, "red");
-	gtk_snapshot_append_color (snap, &red, &GRAPHENE_RECT_INIT(0, 0, w, h)); // DEBUG
+	//gtk_snapshot_append_color (snap, &red, &GRAPHENE_RECT_INIT(0, 0, gtk_widget_get_width(self_widget), h)); // DEBUG
 	gdk_rgba_parse(&red, "blue");
 	
 	// Draw children
 	GtkWidget* child = gtk_widget_get_first_child(self_widget);
+	while (child != NULL)
+	{
+		gtk_widget_snapshot_child(	self_widget,
+									child,
+									snap);
+		
+		child = gtk_widget_get_next_sibling(child);
+	}
+	
+	// old version with scaling...
+	/*GtkWidget* child = gtk_widget_get_first_child(self_widget);
 	GtkSnapshot* child_snap = gtk_snapshot_new();
 	gtk_snapshot_scale(child_snap, self->scale, self->scale);
 	while (child != NULL)
@@ -178,7 +181,7 @@ snapshot(	GtkWidget*		self_widget,
 	
 	
 	gtk_snapshot_append_node(	snap,
-								gtk_snapshot_free_to_node(child_snap));
+								gtk_snapshot_free_to_node(child_snap));*/
 }
 
 
@@ -190,6 +193,7 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 {
 	DoodlesContainer* self = (DoodlesContainer*)user_data;
 	DoodlesContainerClass* self_class = DOODLES_CONTAINER_GET_CLASS(self);
+	
 	
 	static gdouble mouse_pos_x = 0, mouse_pos_y = 0;
 	
@@ -231,10 +235,14 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 		case (GDK_SCROLL):
 			if (gdk_event_get_modifier_state(event) & GDK_CONTROL_MASK)
 			{
+				if (gdk_scroll_event_get_direction(event) != GDK_SCROLL_UP && gdk_scroll_event_get_direction(event) != GDK_SCROLL_DOWN)
+					return FALSE;
+				
 				// Get new scale
 				gdouble old_scale = self->scale;
 				self->scale += 0.3 * (gdk_scroll_event_get_direction(event) == GDK_SCROLL_UP ? 1 : -1) * CLAMP((1.0 / 3.0) * self->scale, 0.1, 1);
 				self->scale = CLAMP(self->scale, 0.2, 3);
+				doodles_canvas_set_zoom(self->scale);
 				
 				// Get previous & new mouse positions (in "unscaled" pixels)
 				gdouble old_x = mouse_pos_x / old_scale;
@@ -250,9 +258,9 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 				
 				// Move scrolled window
 				gdouble ph = (gtk_widget_get_width(GTK_WIDGET(self)) / old_scale) * self->scale;
-				gtk_adjustment_set_upper(gtk_scrolled_window_get_hadjustment(self->scroll_window), ph);
+				gtk_adjustment_set_upper(gtk_scrolled_window_get_hadjustment(self->scroll_window), ph * 1.5);
 				ph = (gtk_widget_get_height(GTK_WIDGET(self)) / old_scale) * self->scale;
-				gtk_adjustment_set_upper(gtk_scrolled_window_get_vadjustment(self->scroll_window), ph);
+				gtk_adjustment_set_upper(gtk_scrolled_window_get_vadjustment(self->scroll_window), ph * 1.5);
 				gdouble srl_h = gtk_adjustment_get_value(gtk_scrolled_window_get_hadjustment(self->scroll_window));
 				gdouble srl_v = gtk_adjustment_get_value(gtk_scrolled_window_get_vadjustment(self->scroll_window));
 				
@@ -260,8 +268,17 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 				gtk_adjustment_set_value(gtk_scrolled_window_get_vadjustment(self->scroll_window), srl_v - (delta_y * self->scale));
 				
 				
-				// Resize widget
+				// Resize widget(s)
 				gtk_widget_queue_resize(GTK_WIDGET(self));
+				
+				
+				GtkWidget* child = gtk_widget_get_first_child(GTK_WIDGET(self));
+				while (child != NULL)
+				{
+					gtk_widget_queue_resize(child);
+					
+					child = gtk_widget_get_next_sibling(child);
+				}
 				
 				return TRUE;
 			}
@@ -294,10 +311,6 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 			GtkAllocation alloc;
 			gtk_widget_get_allocation(	child,
 										&alloc);
-			alloc.x *= self->scale;
-			alloc.y *= self->scale;
-			alloc.width *= self->scale;
-			alloc.height *= self->scale;
 			
 			
 			// Mouse inside widget allocation?
@@ -307,8 +320,6 @@ on_legacy_event(	GtkEventControllerLegacy*	controller,
 				// Get local mouse pos
 				gdouble ph_mouse_x = mouse_pos_x - alloc.x;
 				gdouble ph_mouse_y = mouse_pos_y - alloc.y;
-				ph_mouse_x /= self->scale;
-				ph_mouse_y /= self->scale;
 				
 				
 				// Pass event if canvas
@@ -370,7 +381,10 @@ doodles_container_instance_init(	GTypeInstance*	instance,
 	DoodlesContainer* self = DOODLES_CONTAINER(instance);
 	
 	self->scale = 1.5;
+	doodles_canvas_set_zoom(self->scale);
 	gtk_widget_set_halign(GTK_WIDGET(self), GTK_ALIGN_CENTER);
+	gtk_widget_set_margin_start(GTK_WIDGET(self), 50);
+	gtk_widget_set_margin_end(GTK_WIDGET(self), 50);
 	gtk_widget_set_focusable(GTK_WIDGET(self), TRUE);
 	
 	GtkEventController* controller = gtk_event_controller_legacy_new();

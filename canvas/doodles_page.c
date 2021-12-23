@@ -27,6 +27,7 @@ struct _DoodlesPage
 	gdouble					prev_cursor_x;
 	gdouble					prev_cursor_y;
 	gpointer				tool_data;
+	gint					prev_used_tool;
 };
 
 
@@ -40,13 +41,39 @@ static void pos_to_cm(	gdouble*		x,
 						gdouble*		y);
 
 
+// STRUCTS //
+struct _tool_text_data
+{
+	STR_WIDGET_CONTAINER*	container;
+	guint					state;
+	gdouble					local_x; // local position when started dragging
+	gdouble					local_y;
+};
+
+
+// ENUMS //
+enum _tool_text_state
+{
+	TXT_STATE_NONE = 0,
+	TXT_STATE_DRAG,
+	TXT_STATE_RESIZE_LEFT,
+	TXT_STATE_RESIZE_RIGHT
+};
+
+
+// MACROS //
+#define POINT_IN_RECT(x, y, rx, ry, rw, rh) ((x) >= (rx) && (x) < ((rx) + (rw)) && (y) >= (ry) && (y) < ((ry) + (rh)))
+#define TEXT_RECT_HEIGHT 26
+#define TEXT_RECT_SPACE 10
+
+
+
 // Main Functions
 static void
 doodles_page_class_init(	gpointer	klass,
 							gpointer	klass_data)
 {
 	GObjectClass* object_class = G_OBJECT_CLASS(klass);
-	//DoodlesPageClass* self_class = DOODLES_PAGE_CLASS(object_class);
 }
 
 
@@ -60,6 +87,8 @@ doodles_page_instance_init(	GTypeInstance*	instance,
 	self->cursor_y = 0;
 	self->prev_cursor_x = 0;
 	self->prev_cursor_y = 0;
+	self->tool_data = NULL;
+	self->prev_used_tool = TOOL_NONE;
 	
 	for (guchar i = 0; i < 3; i++)
 		self->mouse_pressed[i] = FALSE;
@@ -127,23 +156,13 @@ doodles_page_new(	DoodlesGuiController*	controller,
 	doodles_canvas_set_child(	self->layer_graphics,
 								self->layer_background);
 	
+	
+	//GtkWidget* phh = gtk_label_new("# Bruh\nBruh moment\n<small>Small text</small>");
 	GtkWidget* phh = gtk_text_view_new();
-	//gtk_widget_set_opacity(phh, 0.5);
 	doodles_canvas_add_widget(	self->layer_graphics,
 								phh,
-								50, 50,
-								100, 50);
-	//gtk_widget_set_cursor(phh, gdk_cursor_new_from_name("default", NULL));
-	//gtk_widget_set_focusable(phh, FALSE);
-	//gtk_widget_set_sensitive(phh, FALSE);
-	
-	GtkCssProvider* provider = gtk_css_provider_new();
-	gtk_css_provider_load_from_data(	provider,
-										"textview { background: none; } textview text { background: none; }",
-										-1);
-	gtk_style_context_add_provider(	gtk_widget_get_style_context(phh),
-									GTK_STYLE_PROVIDER(provider),
-									GTK_STYLE_PROVIDER_PRIORITY_USER);
+								1, 1.2,
+								3, 2);
 	
 	
 	// Drawing Handler
@@ -176,12 +195,35 @@ dispose(GObject* object)
 /////////////////
 
 static void
+tool_clear_data(DoodlesPage* self)
+{
+	switch (self->prev_used_tool)
+	{
+		case (TOOL_PEN):
+			GSList* l = self->tool_data;
+			while (l != NULL)
+			{
+				free(l->data);
+				
+				l = l->next;
+			}
+			g_slist_free(self->tool_data);
+			break;
+		case (TOOL_TEXT):
+			free(self->tool_data);
+			break;
+	}
+	
+	self->tool_data = NULL;
+}
+
+static void
 pen_event(	DoodlesPage*	self,
 			gint			gdk_event_button,
 			gint			gdk_event_type)
 {
 	// pen_event is for both pen & highlighter, as they have the same function anyways
-
+	
 	switch (gdk_event_type)
 	{
 		case (GDK_MOTION_NOTIFY):
@@ -282,15 +324,7 @@ pen_event(	DoodlesPage*	self,
 				
 				
 				// Free data
-				GSList* l = self->tool_data;
-				while (l != NULL)
-				{
-					free(l->data);
-					
-					l = l->next;
-				}
-				g_slist_free(self->tool_data);
-				self->tool_data = NULL;
+				tool_clear_data(self);
 			}
 			
 			gtk_widget_queue_draw(GTK_WIDGET(self->layer_work));
@@ -496,6 +530,118 @@ eraser_event(	DoodlesPage*	self,
 	}
 }
 
+
+static void
+text_event(	DoodlesPage*	self,
+			gint			gdk_event_button,
+			gint			gdk_event_type)
+{
+	// Alloc tool data if empty
+	if (self->tool_data == NULL)
+	{
+		self->tool_data = malloc(sizeof(struct _tool_text_data));
+		struct _tool_text_data* ttd = self->tool_data;
+		ttd->container = NULL;
+		ttd->state = TXT_STATE_NONE;
+	}
+	
+	switch (gdk_event_type)
+	{
+		case (GDK_BUTTON_PRESS):
+		case (GDK_BUTTON_RELEASE):
+		case (GDK_MOTION_NOTIFY):
+			struct _tool_text_data* ttd = self->tool_data;
+			
+			// ..Is dragging?
+			if (ttd->state == TXT_STATE_DRAG && gdk_event_type == GDK_MOTION_NOTIFY)
+			{
+				(ttd->container)->x = self->cursor_x - ttd->local_x;
+				(ttd->container)->y = self->cursor_y - ttd->local_y;
+				doodles_canvas_widget_realloc(self->layer_graphics, ttd->container);
+				goto skip_to_draw;
+			}
+			
+			// ..TXT_STATE_RESIZE_LEFT?
+			// TODO
+			
+			// ..TXT_STATE_RESIZE_RIGHT?
+			// TODO
+			
+			// ..Is still focusing text field??
+			if (ttd->container != NULL)
+			{
+				STR_WIDGET_CONTAINER* c = ttd->container;
+				
+				gdouble ph_space = TEXT_RECT_SPACE / doodles_canvas_get_pixel_per_cm();
+				gdouble ph_height = TEXT_RECT_HEIGHT / doodles_canvas_get_pixel_per_cm();
+				if (!POINT_IN_RECT(	self->cursor_x,
+									self->cursor_y,
+									c->x - ph_space,
+									c->y - ph_height - ph_space,
+									c->w + ph_space * 2,
+									c->h + ph_height + ph_space * 2))
+				{
+					ttd->container = NULL;
+					ttd->state = TXT_STATE_NONE;
+				}
+			}
+			
+			// Find new text field to focus on
+			if (ttd->container == NULL)
+			{
+				STR_WIDGET_CONTAINER* cont = doodles_canvas_get_widget_list(self->layer_graphics);
+				
+				while (cont != NULL)
+				{
+					if (POINT_IN_RECT(self->cursor_x, self->cursor_y, cont->x, cont->y, cont->w, cont->h))
+					{
+						ttd->container = cont;
+						ttd->state = TXT_STATE_NONE;
+						
+						break;
+					}
+					
+					cont = cont->next;
+				}
+			}
+			
+			// Start drag?
+			if (ttd->state == TXT_STATE_NONE && gdk_event_type == GDK_BUTTON_PRESS && ttd->container != NULL)
+			{
+				STR_WIDGET_CONTAINER* c = ttd->container;
+				
+				gdouble ph_space = TEXT_RECT_SPACE / doodles_canvas_get_pixel_per_cm();
+				gdouble ph_height = TEXT_RECT_HEIGHT / doodles_canvas_get_pixel_per_cm();
+				if (POINT_IN_RECT(	self->cursor_x,
+									self->cursor_y,
+									c->x - ph_space,
+									c->y - ph_height - ph_space,
+									c->w + ph_space * 2,
+									ph_height))
+				{
+					ttd->state = TXT_STATE_DRAG;
+					
+					ttd->local_x = self->cursor_x - c->x;
+					ttd->local_y = self->cursor_y - c->y;
+				}
+			}
+			
+			// End drag?
+			if (ttd->state == TXT_STATE_DRAG && gdk_event_type == GDK_BUTTON_RELEASE && ttd->container != NULL)
+			{
+				ttd->state = TXT_STATE_NONE;
+			}
+			
+			
+			// Draw
+			skip_to_draw:
+			gtk_widget_queue_draw(GTK_WIDGET(self->layer_work));
+			
+			break;
+	}
+}
+
+
 void
 doodles_page_receive_event(	DoodlesPage*	self,
 							gdouble			mouse_x,
@@ -535,19 +681,33 @@ doodles_page_receive_event(	DoodlesPage*	self,
 			break;
 	}
 	
+	// Clear old tool data
+	if (self->prev_used_tool != doodles_gui_controller_get_tool(self->gui_controller))
+	{
+		if (self->prev_used_tool != TOOL_NONE)
+			tool_clear_data(self);
+		
+		self->prev_used_tool = doodles_gui_controller_get_tool(self->gui_controller);
+	}
+	
 	// Call tool event
 	switch (doodles_gui_controller_get_tool(self->gui_controller))
 	{
 		case (TOOL_PEN):
 		case (TOOL_HIGHLIGHTER):
 			pen_event(	self,
-								gdk_event_button,
-								gdk_event_type);
+						gdk_event_button,
+						gdk_event_type);
 			break;
 		case (TOOL_ERASER):
 			eraser_event(	self,
-									gdk_event_button,
-									gdk_event_type);
+							gdk_event_button,
+							gdk_event_type);
+			break;
+		case (TOOL_TEXT):
+			text_event(	self,
+						gdk_event_button,
+						gdk_event_type);
 			break;
 	}
 }
@@ -605,6 +765,49 @@ on_draw_pen(	DoodlesPage*	self,
 								0.7, 0.7, 0.7, 1.0);
 }
 
+static void
+on_draw_text(	DoodlesPage*	self,
+				cairo_t*		cairo,
+				gdouble w, gdouble h,
+				gdouble			ppc)
+{
+	struct _tool_text_data* ttd = self->tool_data;
+	if (ttd != NULL && ttd->container != NULL)
+	{
+		STR_WIDGET_CONTAINER* cont = ttd->container;
+		
+		
+		// Title bar
+		gboolean did_fill = FALSE;
+		title_bar_shape:
+		cairo_rectangle (	cairo,
+							cont->x * doodles_canvas_get_pixel_per_cm() - TEXT_RECT_SPACE,
+							cont->y * doodles_canvas_get_pixel_per_cm() - TEXT_RECT_HEIGHT - TEXT_RECT_SPACE,
+							cont->w * doodles_canvas_get_pixel_per_cm() + TEXT_RECT_SPACE * 2,
+							TEXT_RECT_HEIGHT);
+		if (!did_fill)
+		{
+			did_fill = TRUE;
+			cairo_set_source_rgba(cairo, 0.4, 0.4, 0.4, 0.4);
+			cairo_fill(cairo);
+			goto title_bar_shape;
+		}
+		
+		
+		// Content
+		cairo_rectangle (	cairo,
+							cont->x * doodles_canvas_get_pixel_per_cm() - TEXT_RECT_SPACE,
+							cont->y * doodles_canvas_get_pixel_per_cm() - TEXT_RECT_SPACE,
+							cont->w * doodles_canvas_get_pixel_per_cm() + TEXT_RECT_SPACE * 2,
+							cont->h * doodles_canvas_get_pixel_per_cm() + TEXT_RECT_SPACE * 2);
+		
+		
+		cairo_set_line_width(cairo, 1.0);
+		cairo_set_source_rgba(cairo, 0.4, 0.4, 0.4, 1.0);
+		cairo_stroke(cairo);
+	}
+}
+
 static gboolean
 on_draw(	GtkWidget*		widget,
 			GtkSnapshot*	snap,
@@ -630,6 +833,10 @@ on_draw(	GtkWidget*		widget,
 							m);
 			break;
 		case (TOOL_TEXT):
+			on_draw_text(	self,
+							cairo,
+							w, h,
+							m);
 			break;
 	}
 	

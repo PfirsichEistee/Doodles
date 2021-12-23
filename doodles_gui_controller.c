@@ -23,7 +23,6 @@ struct _DoodlesGuiController
 	// Private attributes
 	DoodlesContainer*	page_container;
 	
-	
 	guint				current_tool;
 	GtkWidget*			action_bar;
 	GtkBox*				tool_box; // tool buttons are in here
@@ -122,7 +121,7 @@ doodles_gui_controller_instance_init(	GTypeInstance*	instance,
 	self->page_container = DOODLES_CONTAINER(doodles_container_new());
 	
 	DoodlesPage* page = doodles_page_new(self, 18, 24);
-	DoodlesPage* page2 = doodles_page_new(self, 24, 18);
+	DoodlesPage* page2 = doodles_page_new(self, 24.7, 18);
 	DoodlesPage* page3 = doodles_page_new(self, 18, 24);
 	DoodlesPage* page4 = doodles_page_new(self, 18, 24);
 	doodles_container_insert(self->page_container, doodles_page_get_widget(page));
@@ -505,6 +504,10 @@ on_tool_button_clicked(	GtkButton*	button,
 		g_list_free(prev_container->box_children);
 		prev_container->box_children = NULL;
 	}
+	
+	// Signal
+	
+	
 	
 	ToolContainer* container = doodles_gui_controller_get_tool_container(self);
 	

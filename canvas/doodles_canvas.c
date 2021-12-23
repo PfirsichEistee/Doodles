@@ -29,7 +29,7 @@ struct _DoodlesCanvas
 	
 	// Data
 	STR_LIST*				data_lines;
-	STR_WIDGET_CONTAINER*	containers;
+	STR_WIDGET_CONTAINER*	data_widgets;
 };
 
 
@@ -65,6 +65,7 @@ doodles_canvas_draw_background	(	cairo_t*	cairo,
 // VARIABLES //
 
 static DoodlesCanvasClass* class_pointer;
+static gdouble ZOOM = 1.0;
 
 
 
@@ -104,7 +105,13 @@ doodles_canvas_set_draw(	DoodlesCanvas* self,
 gdouble
 doodles_canvas_get_pixel_per_cm()
 {
-	return PIXEL_PER_CM * doodles_canvas_get_class()->zoom;
+	return PIXEL_PER_CM * ZOOM;
+}
+
+void
+doodles_canvas_set_zoom(gdouble pZoom)
+{
+	ZOOM = pZoom;
 }
 
 DoodlesPage*
@@ -333,15 +340,15 @@ doodles_canvas_add_widget(	DoodlesCanvas*	self,
 	cont->next = NULL;
 	
 	// Add to list
-	if (self->containers == NULL)
+	if (self->data_widgets == NULL)
 	{
 		// ..first entry
-		self->containers = cont;
+		self->data_widgets = cont;
 	}
 	else
 	{
 		// ..append new entry
-		STR_WIDGET_CONTAINER* ph = self->containers;
+		STR_WIDGET_CONTAINER* ph = self->data_widgets;
 		while (ph->next != NULL)
 			ph = ph->next;
 		
@@ -352,6 +359,24 @@ doodles_canvas_add_widget(	DoodlesCanvas*	self,
 	
 	gtk_widget_queue_allocate(GTK_WIDGET(self));
 	gtk_widget_queue_draw(GTK_WIDGET(self));
+}
+
+void
+doodles_canvas_widget_realloc(	DoodlesCanvas*			self,
+								STR_WIDGET_CONTAINER*	cont)
+{
+	gdouble ppc = doodles_canvas_get_pixel_per_cm();
+	
+	const GtkAllocation alloc = { cont->x * ppc, cont->y * ppc, cont->w * ppc, cont->h * ppc };
+	gtk_widget_size_allocate(	cont->widget,
+								&alloc,
+								-1);
+}
+
+STR_WIDGET_CONTAINER*
+doodles_canvas_get_widget_list(DoodlesCanvas* self)
+{
+	return self->data_widgets;
 }
 
 
@@ -400,27 +425,27 @@ doodles_canvas_draw_background	(	cairo_t*	cairo,
 	if (bg_type == BG_NONE)
 		return;
 	
-	w *= doodles_canvas_get_pixel_per_cm();
-	h *= doodles_canvas_get_pixel_per_cm();
 	gdouble ppc = doodles_canvas_get_pixel_per_cm();
 	
-	cairo_rectangle(cairo, 0, 0, w, h);
+	cairo_rectangle(cairo, 0, 0, w * ppc, h * ppc);
 	cairo_set_source_rgb(cairo, 1, 1, 1);
 	cairo_fill(cairo);
 	
+	gdouble plus_x = ((w - floor(w)) * ppc) / 2;
+	gdouble plus_y = ((h - floor(h)) * ppc) / 2;
 	
 	switch (bg_type)
 	{
 		case (BG_CHECKERED):
-			for (int x = 0; x < floor(w / ppc); x++)
+			for (int x = 0; x < ceil(w); x++)
 			{
-				cairo_move_to(cairo, (((int)w % (int)ppc) / 2) + ppc * x, 0);
-				cairo_line_to(cairo, (((int)w % (int)ppc) / 2) + ppc * x, h);
+				cairo_move_to(cairo, ppc * x + plus_x, 0);
+				cairo_line_to(cairo, ppc * x + plus_x, h * ppc);
 			}
-			for (int y = 0; y < floor(h / ppc); y++)
+			for (int y = 0; y < ceil(h); y++)
 			{
-				cairo_move_to(cairo, 0, (((int)h % (int)ppc) / 2) + ppc * y);
-				cairo_line_to(cairo, w, (((int)h % (int)ppc) / 2) + ppc * y);
+				cairo_move_to(cairo, 0, ppc * y + plus_y);
+				cairo_line_to(cairo, w * ppc, ppc * y + plus_y);
 			}
 			break;
 	}
@@ -470,10 +495,10 @@ measure (	GtkWidget*		self,
 {
 	DoodlesCanvas* canvas_self = DOODLES_CANVAS(self);
 	DoodlesCanvasClass* canvas_klass = DOODLES_CANVAS_GET_CLASS(canvas_self);
+	GtkWidgetClass* widget_klass = GTK_WIDGET_CLASS(canvas_klass);
 	
-	gdouble w = canvas_self->width * PIXEL_PER_CM * canvas_klass->zoom;
-	gdouble h = canvas_self->height * PIXEL_PER_CM * canvas_klass->zoom;
-	
+	gdouble w = canvas_self->width * doodles_canvas_get_pixel_per_cm();
+	gdouble h = canvas_self->height * doodles_canvas_get_pixel_per_cm();
 	
 	if (orientation == GTK_ORIENTATION_HORIZONTAL)
 	{
@@ -495,31 +520,31 @@ measure (	GtkWidget*		self,
 	if (DOODLES_CANVAS(self)->child_canvas != NULL)
 	{
 		GtkWidget* child_widget = GTK_WIDGET(DOODLES_CANVAS(self)->child_canvas);
-		gtk_widget_measure(	child_widget,
-							orientation,
-							for_size,
-							minimum,
-							natural,
-							minimum_baseline,
-							natural_baseline);
+		widget_klass->measure(	child_widget,
+								orientation,
+								for_size,
+								minimum,
+								natural,
+								minimum_baseline,
+								natural_baseline);
 		// ^^^ doesnt do much. Child will only execute this same method and allocate
 	}
 	
 	// Measure child-widgets if exist
-	if (canvas_self->containers != NULL)
+	if (canvas_self->data_widgets != NULL)
 	{
-		STR_WIDGET_CONTAINER* cont = canvas_self->containers;
+		STR_WIDGET_CONTAINER* cont = canvas_self->data_widgets;
+		//gdouble ppc = doodles_canvas_get_pixel_per_cm();
 		
 		while (cont != NULL)
 		{
-			const GtkAllocation alloc = { cont->x, cont->y, cont->w, cont->h };
-			gtk_widget_size_allocate(	cont->widget,
-										&alloc,
-										-1);
+			doodles_canvas_widget_realloc(canvas_self, cont);
 			
 			cont = cont->next;
 		}
 	}
+	
+	gtk_widget_queue_draw(self);
 }
 
 static void
@@ -550,12 +575,20 @@ snapshot(	GtkWidget*		self_widget,
 	gdouble w = doodles_canvas_get_width(self);
 	gdouble h = doodles_canvas_get_height(self);
 	gdouble m = doodles_canvas_get_pixel_per_cm();
+	GdkRGBA red;
+	gdk_rgba_parse(&red, "rgba(0.5, 0.5, 0, 0.1)");
+	//gtk_snapshot_append_color (snap, &red, &GRAPHENE_RECT_INIT(0, 0, w * m, h * m));
+	gdk_rgba_parse(&red, "green");
+	//gtk_snapshot_append_color (snap, &red, &GRAPHENE_RECT_INIT(0, 0, w * m, h * m)); // DEBUG
+	
+	
+	
 	cairo_t* cairo = gtk_snapshot_append_cairo(	snap,
 												&GRAPHENE_RECT_INIT(0, 0, w*m, h*m));
 	
 	// Background
 	doodles_canvas_draw_background	(	cairo,
-										w, h,
+										self->width, self->height,
 										self->background);
 	
 	if (self->child_canvas == NULL)
@@ -571,7 +604,7 @@ snapshot(	GtkWidget*		self_widget,
 	}
 	
 	
-	// Content
+	// Lines
 	if (self->data_lines != NULL)
 	{
 		STR_LIST* list = self->data_lines;
@@ -604,9 +637,10 @@ snapshot(	GtkWidget*		self_widget,
 		} while (list != NULL);
 	}
 	
-	if (self->containers != NULL)
+	// Widgets
+	if (self->data_widgets != NULL)
 	{
-		STR_WIDGET_CONTAINER* cont = self->containers;
+		STR_WIDGET_CONTAINER* cont = self->data_widgets;
 		
 		while (cont != NULL)
 		{
@@ -617,6 +651,21 @@ snapshot(	GtkWidget*		self_widget,
 			cont = cont->next;
 		}
 	}
+	// DEBUG widgets
+	/*if (self->data_widgets != NULL)
+	{
+		STR_WIDGET_CONTAINER* cont = self->data_widgets;
+		gdouble ppc = doodles_canvas_get_pixel_per_cm();
+		GdkRGBA dbgclr;
+		gdk_rgba_parse(&dbgclr, "rgba(0.5, 0.5, 0.5, 0.1)");
+		
+		while (cont != NULL)
+		{
+			gtk_snapshot_append_color(snap, &dbgclr, &GRAPHENE_RECT_INIT(cont->x * ppc, cont->y * ppc, cont->w * ppc, cont->h * ppc));
+			
+			cont = cont->next;
+		}
+	}*/
 	
 	cairo_destroy(cairo);
 }
@@ -663,7 +712,7 @@ doodles_canvas_instance_init(	GTypeInstance*	instance,
 	self->draw = NULL;
 	self->draw_user_data = NULL;
 	self->data_lines = NULL;
-	self->containers = NULL;
+	self->data_widgets = NULL;
 }
 
 GType

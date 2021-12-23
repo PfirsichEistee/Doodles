@@ -59,6 +59,9 @@ doodles_canvas_set_draw(	DoodlesCanvas* self,
 gdouble
 doodles_canvas_get_pixel_per_cm();
 
+void
+doodles_canvas_set_zoom(gdouble pZoom);
+
 DoodlesPage*
 doodles_canvas_get_page(DoodlesCanvas* self);
 
@@ -104,6 +107,13 @@ doodles_canvas_add_widget(	DoodlesCanvas*	self,
 							GtkWidget*		widget,
 							gdouble x, gdouble y,
 							gdouble w, gdouble h);
+
+void
+doodles_canvas_widget_realloc(	DoodlesCanvas*			self,
+								STR_WIDGET_CONTAINER*	cont);
+
+STR_WIDGET_CONTAINER*
+doodles_canvas_get_widget_list(DoodlesCanvas* self);
 
 void
 doodles_canvas_line_calc_bounds(STR_LINE* line);

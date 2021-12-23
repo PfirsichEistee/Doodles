@@ -45,6 +45,10 @@ void doodles_gui_controller_get_color(	DoodlesGuiController*	self,
 gint doodles_gui_controller_get_tool(DoodlesGuiController* self);
 gdouble doodles_gui_controller_get_size(DoodlesGuiController* self);
 
+void
+doodles_gui_controller_focus_page(	DoodlesGuiController*	self,
+									DoodlesPage*			page);
+
 
 
 #endif
